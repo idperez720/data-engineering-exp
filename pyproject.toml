@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "data-engineering-exp"
+version = "0.1.0"
+description = "Common data engineering utilities for Spark and Pandas"
+authors = ["idperez720 <ivandavidperez4@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.3.0"
+pyspark = "^4.0.0"
+pyyaml = "^6.0.2"
+python-dotenv = "^1.1.0"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.0"
+black = "^25.1.0"
+flake8 = "^7.2.0"
+jupyter = "^1.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
