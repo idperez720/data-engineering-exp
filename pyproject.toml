@@ -20,6 +20,20 @@ black = "^25.1.0"
 flake8 = "^7.2.0"
 jupyter = "^1.1.1"
 
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+exclude = ["tests/data", "build", "dist"]
+fix = true
+unsafe-fixes = false
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]  # line too long (already handled by black)
+
+[tool.ruff.format]
+quote-style = "double"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
