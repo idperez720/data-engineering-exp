@@ -19,38 +19,6 @@ def apply_scd2_changes(
     """
     Applies Slowly Changing Dimension Type 2 (SCD2) logic to detect and manage changes
     in a dimension table using PySpark.
-
-    Parameters
-    ----------
-    spark_df_new : DataFrame
-        Incoming snapshot DataFrame that contains a timestamp column with record extraction/update
-        time.
-
-    spark_df_existing : DataFrame
-        Existing dimension table containing historical records with SCD2 fields.
-
-    business_keys : List[str]
-        Columns that uniquely identify a dimension record.
-
-    compare_columns : List[str]
-        Columns used to detect changes (excluding technical fields like dates or flags).
-
-    effective_date_col : str
-        Column that stores the start date of the current version of a record.
-
-    end_date_col : str
-        Column that stores the end date of the current version of a record.
-
-    current_flag_col : str
-        Column that indicates whether a record is the current one (Boolean or int).
-
-    input_timestamp_col : str
-        Column in `spark_df_new` representing the record's processing timestamp.
-
-    Returns
-    -------
-    DataFrame
-        A DataFrame with new and updated records according to SCD2 logic.
     """
     MAX_DATE = "9999-12-31"
 
@@ -61,22 +29,19 @@ def apply_scd2_changes(
         .withColumn(current_flag_col, F.lit(True))
     )
 
-    # Aliases for joining
     new_alias = "new"
     existing_alias = "exist"
 
-    # Build join condition using business keys
     join_condition = [
         F.col(f"{new_alias}.{col}") == F.col(f"{existing_alias}.{col}")
         for col in business_keys
     ]
 
-    # Join new data with existing data
     df_joined = df_new.alias(new_alias).join(
         spark_df_existing.alias(existing_alias), on=join_condition, how="left"
     )
 
-    # Build condition to detect any changes in compare_columns
+    # Detect changes in compare columns
     change_condition = None
     for col in compare_columns:
         condition = F.col(f"{new_alias}.{col}") != F.col(f"{existing_alias}.{col}")
@@ -84,33 +49,19 @@ def apply_scd2_changes(
             condition if change_condition is None else change_condition | condition
         )
 
-    # Rows where the key exists and the data has changed → need to expire old and insert new
+    # Changed records (new version to insert)
     df_changed = (
         df_joined.filter(F.col(f"{existing_alias}.{current_flag_col}"))
-        .filter(change_condition)  # type: ignore
-        .select(
-            [f"{new_alias}.{c}" for c in df_new.columns]
-            + [
-                f"{new_alias}.{effective_date_col}",
-                f"{new_alias}.{end_date_col}",
-                f"{new_alias}.{current_flag_col}",
-            ]  # type: ignore
-        )
-    )  # type: ignore
+        .filter(change_condition)
+        .select([F.col(f"{new_alias}.{c}").alias(c) for c in spark_df_existing.columns])
+    )
 
-    # Rows that are new (no matching business key in existing table)
+    # New records (not found in existing)
     df_new_only = df_joined.filter(
         F.col(f"{existing_alias}.{business_keys[0]}").isNull()
-    ).select(
-        [f"{new_alias}.{c}" for c in df_new.columns]
-        + [
-            F.col(f"{new_alias}.{effective_date_col}"),
-            F.col(f"{new_alias}.{end_date_col}"),
-            F.col(f"{new_alias}.{current_flag_col}"),
-        ]  # type: ignore
-    )  # type: ignore
+    ).select([F.col(f"{new_alias}.{c}").alias(c) for c in spark_df_existing.columns])
 
-    # Rows that already exist and have not changed → keep as-is
+    # Unchanged records (keep as-is)
     unchanged_condition = F.lit(True)
     for col in compare_columns:
         unchanged_condition &= F.col(f"{new_alias}.{col}") == F.col(
@@ -120,23 +71,43 @@ def apply_scd2_changes(
     df_unchanged = (
         df_joined.filter(F.col(f"{existing_alias}.{current_flag_col}"))
         .filter(unchanged_condition)
-        .select([f"{existing_alias}.{c}" for c in spark_df_existing.columns])
+        .select(
+            [F.col(f"{existing_alias}.{c}").alias(c) for c in spark_df_existing.columns]
+        )
     )
 
-    # Expire previous versions by updating end_date and marking them as not current
+    # Expire previous records
     df_expired = (
         df_joined.filter(F.col(f"{existing_alias}.{current_flag_col}"))
-        .filter(change_condition)  # type: ignore
-        .select([F.col(f"{existing_alias}.{c}") for c in spark_df_existing.columns])
-        .withColumn(end_date_col, F.col(input_timestamp_col))
-        .withColumn(current_flag_col, F.lit(False))
+        .filter(change_condition)
+        .select(
+            [
+                (
+                    F.col(f"{existing_alias}.{c}").alias(c)
+                    if c not in [end_date_col, current_flag_col]
+                    else (
+                        F.col(f"{new_alias}.{input_timestamp_col}").alias(end_date_col)
+                        if c == end_date_col
+                        else F.lit(False).alias(current_flag_col)
+                    )
+                )
+                for c in spark_df_existing.columns
+            ]
+        )
+    )
+    # Records from existing table that are still current and not in new_df at all (preserve them)
+    df_preserved = (
+        spark_df_existing.alias(existing_alias)
+        .join(spark_df_new.alias(new_alias), on=business_keys, how="left_anti")
+        .filter(F.col(f"{existing_alias}.{current_flag_col}"))
+        .select(
+            [F.col(f"{existing_alias}.{c}").alias(c) for c in spark_df_existing.columns]
+        )
     )
 
-    # Final output: combine unchanged + expired + new records (changed and new)
-    final_df = (
+    return (
         df_new_only.unionByName(df_changed)
         .unionByName(df_expired)
+        .unionByName(df_preserved)
         .unionByName(df_unchanged)
     )
-
-    return final_df

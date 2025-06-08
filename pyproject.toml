@@ -5,13 +5,15 @@ description = "Common data engineering utilities for Spark and Pandas"
 authors = ["idperez720 <ivandavidperez4@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+packages = [{ include = "data_engineering_exp" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 pandas = "^2.3.0"
-pyspark = "^4.0.0"
+pyspark = "3.5.1"
 pyyaml = "^6.0.2"
 python-dotenv = "^1.1.0"
+jupyter = "^1.1.1"
 
 
 [tool.poetry.group.dev.dependencies]
