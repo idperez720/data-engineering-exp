@@ -1,0 +1,45 @@
+site_name: dex
+site_description: Data Engineering Experience Framework
+site_author: Ivan Perez
+site_url: https://github.com/idperez720/data-engineering-exp  # Optional: change to your repo URL
+
+theme:
+  name: material
+  palette:
+    # Light mode configuration
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo    # 🌟 Deep Navy Blue
+      accent: blue       # 🌟 Electric Blue for links/highlights
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    # Dark mode configuration
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo    # 🌟 Deep Navy Blue
+      accent: blue       # 🌟 Electric Blue for links/highlights
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - API Reference:
+      - Data Catalog: api/catalog.md
+      - Data Loader (I/O): api/io.md
