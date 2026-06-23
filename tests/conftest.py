@@ -1,16 +1,23 @@
-"""Pytest configuration."""
+"""Global pytest configuration and shared fixtures."""
 
 import pytest
 from pyspark.sql import SparkSession
 
 
 @pytest.fixture(scope="session")
-def spark():
-    """
-    Creates and returns a SparkSession configured for local testing.
+def spark_session():
+    """Creates a local Spark Session shared across all tests.
+
+    Args:
 
     Returns:
-        pyspark.sql.SparkSession: A SparkSession object with the
-        application name 'tests' and master set to 'local[1]'.
+        SparkSession: A local PySpark session instance.
     """
-    return SparkSession.builder.appName("tests").master("local[1]").getOrCreate()
+    spark = (
+        SparkSession.builder.master("local[*]")
+        .appName("dex-test-suite")
+        .config("spark.sql.shuffle.partitions", "1")
+        .getOrCreate()
+    )
+    yield spark
+    spark.stop()
