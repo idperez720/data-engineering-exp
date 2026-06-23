@@ -1,43 +1,77 @@
-[tool.poetry]
+[project]
 name = "data-engineering-exp"
 version = "0.1.0"
-description = "Common data engineering utilities for Spark and Pandas"
-authors = ["idperez720 <ivandavidperez4@gmail.com>"]
-license = "MIT"
+description = "Common data engineering utilities for improved development experience"
+authors = [
+    {name = "idperez720",email = "ivandavidperez4@gmail.com"}
+]
+license = {text = "MIT"}
 readme = "README.md"
-packages = [{ include = "data_engineering_exp" }]
+requires-python = ">=3.11,<4.0.0"
+dependencies = [
+    "pyspark (>=4.1.2,<5.0.0)",
+    "pandas (>=3.0.3,<4.0.0)"
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pandas = "^2.3.0"
-pyspark = "3.5.1"
-pyyaml = "^6.0.2"
-python-dotenv = "^1.1.0"
-jupyter = "^1.1.1"
+[tool.poetry]
+packages = [{ include = "data_engineering_exp" }]
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.4.0"
-black = "^25.1.0"
-flake8 = "^7.2.0"
-jupyter = "^1.1.1"
-pre-commit = "^4.2.0"
-ruff = "^0.11.13"
+ruff = "^0.15.18"
+black = "^26.5.1"
+pylint = "^4.0.6"
+pytest = "^9.1.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
-exclude = ["tests/data", "build", "dist"]
-fix = true
-unsafe-fixes = false
+target-version = "py311"
+extend-exclude = ["migrations", "alembic"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B"]
-ignore = ["E501"]  # line too long (already handled by black)
+select = ["E", "F", "I"]
 
-[tool.ruff.format]
-quote-style = "double"
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+known-first-party = ["business", "core", "interfaces", "integrations"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+    "no-member",
+    "unused-argument",
+    "fixme",
+    "broad-exception-caught",
+    "unnecessary-pass",
+    "too-few-public-methods",
+    "line-too-long",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-many-positional-arguments",
+    "duplicate-code",
+]
+
+[tool.pylint.FORMAT]
+max-line-length = 88
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: marks tests as critical smoke tests",
+]
+testpaths = ["tests"]
+pythonpath = ["."]
