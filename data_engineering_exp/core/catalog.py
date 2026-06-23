@@ -27,8 +27,19 @@ class DataCatalog:
         Returns:
             None: Initializes the class instance.
         """
+        self.project_root: str = ""
+
         if catalog_path is None:
             catalog_path = self._discover_catalog_path()
+        else:
+            # Derive the root directory context if an explicit path is supplied
+            abs_path = os.path.abspath(catalog_path)
+            if os.path.isfile(abs_path):
+                self.project_root = os.path.dirname(
+                    os.path.dirname(os.path.dirname(abs_path))
+                )
+            else:
+                self.project_root = os.path.dirname(os.path.dirname(abs_path))
 
         if not os.path.exists(catalog_path):
             raise FileNotFoundError(f"Catalog source path not found at: {catalog_path}")
@@ -136,6 +147,7 @@ class DataCatalog:
         while True:
             potential_toml = os.path.join(current_dir, "pyproject.toml")
             if os.path.exists(potential_toml):
+                self.project_root = current_dir
                 return os.path.join(current_dir, "conf", "catalog")
 
             parent_dir = os.path.dirname(current_dir)

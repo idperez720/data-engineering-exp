@@ -23,9 +23,19 @@ def test_project_initializer_scaffolding(tmp_path: Path) -> None:
     )
 
     expected_toml = tmp_path / "pyproject.toml"
-    assert expected_toml.exists()
+    expected_csv = tmp_path / "data" / "sample_table.csv"
+    expected_yaml = tmp_path / "conf" / "catalog" / "sample_dataset.yaml"
 
-    toml_content = expected_toml.read_text(encoding="utf-8")
-    assert 'name = "custom-repo"' in toml_content
-    assert 'version = "2.4.1"' in toml_content
-    assert 'name = "Data Team"' in toml_content
+    assert expected_toml.exists()
+    assert expected_csv.exists()
+    assert expected_yaml.exists()
+
+    # Verify CSV file contents
+    csv_content = expected_csv.read_text(encoding="utf-8")
+    assert "id,name" in csv_content
+    assert "Alice" in csv_content
+
+    # Verify YAML configuration attributes
+    yaml_content = expected_yaml.read_text(encoding="utf-8")
+    assert "format: 'csv'" in yaml_content
+    assert "storage_path: 'data/sample_table.csv'" in yaml_content

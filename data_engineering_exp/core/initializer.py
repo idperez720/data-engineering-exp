@@ -46,12 +46,13 @@ class ProjectInitializer:
         folders = [
             os.path.join(self.base_path, "conf", "catalog"),
             os.path.join(self.base_path, "src", "notebooks"),
+            os.path.join(self.base_path, "data"),
         ]
 
         for folder in folders:
             os.makedirs(folder, exist_ok=True)
 
-        # Build custom localized configuration file using interactive properties
+        # Create a clean, standard pyproject.toml as the anchor of the project
         toml_path = os.path.join(self.base_path, "pyproject.toml")
         toml_content = (
             "[project]\n"
@@ -61,19 +62,27 @@ class ProjectInitializer:
             "authors = [\n"
             f'    {{name = "{author}"}}\n'
             "]\n"
-            'requires-python = ">=3.11"\n'
+            'requires-python = ">=3.11,<4.0.0"\n'
         )
         with open(toml_path, "w", encoding="utf-8") as file:
             file.write(toml_content)
 
-        # Inject a sample boilerplate YAML catalog to get the user started
+        # Drop a real physical sample CSV file into the new data folder
+        csv_path = os.path.join(self.base_path, "data", "sample_table.csv")
+        csv_content = "id,name\n1,Alice\n2,Bob\n"
+        with open(csv_path, "w", encoding="utf-8") as csv_file:
+            csv_file.write(csv_content)
+
+        # Inject a sample boilerplate YAML catalog pointing to the real CSV
         sample_catalog_path = os.path.join(
             self.base_path, "conf", "catalog", "sample_dataset.yaml"
         )
         sample_content = (
             "sample_table:\n"
             "  description: 'Boilerplate example dataset created by dex'\n"
-            "  format: 'parquet'\n"
+            "  format: 'csv'\n"
+            "  engine: 'pandas'\n"
+            "  storage_path: 'data/sample_table.csv'\n"
             "  columns:\n"
             "    - name: 'id'\n"
             "      type: 'integer'\n"
