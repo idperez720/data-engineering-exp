@@ -1,7 +1,7 @@
 [project]
 name = "data-engineering-exp"
 version = "0.1.0"
-description = "Common data engineering utilities for improved development experience"
+description = "A minimalist, agnostic Python framework to standardize data engineering pipelines."
 authors = [
     {name = "idperez720",email = "ivandavidperez4@gmail.com"}
 ]
@@ -17,6 +17,14 @@ dependencies = [
 
 [tool.poetry]
 packages = [{ include = "data_engineering_exp" }]
+repository = "https://github.com/idperez720/data-engineering-exp"
+keywords = ["data-engineering", "pyspark", "pandas", "data-catalog"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 
 [project.scripts]
 dex = "data_engineering_exp.cli:entry_point"
