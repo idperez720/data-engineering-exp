@@ -1,7 +1,7 @@
 """This module implements decentralized data catalog engines for dex."""
 
 import os
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Optional, cast
 
 import yaml
 
@@ -13,20 +13,26 @@ class DataCatalog:
     split into mini-YAML files or kept within a single configuration layout.
     """
 
-    def __init__(self, catalog_path: str):
+    def __init__(self, catalog_path: Optional[str] = None) -> None:
         """Initializes the DataCatalog by scanning files or configuration paths.
 
+        If no path is provided, it automatically seeks upwards from the current
+        working directory to find the standard 'conf/catalog' directory based on
+        the pyproject.toml root anchor file.
+
         Args:
-            catalog_path(str): System directory path or individual file string
-                pointing to the declarative catalog source definitions.
+            catalog_path(Optional[str]): System directory path or file string
+                pointing to catalog definitions. Defaults to None.
 
         Returns:
             None: Initializes the class instance.
         """
+        if catalog_path is None:
+            catalog_path = self._discover_catalog_path()
+
         if not os.path.exists(catalog_path):
             raise FileNotFoundError(f"Catalog source path not found at: {catalog_path}")
 
-        # Strongly typed nested dictionary prevents Any leakage down the line
         self._datasets: Dict[str, Dict[str, Any]] = {}
         self._load_catalog_sources(catalog_path)
 
@@ -57,7 +63,6 @@ class DataCatalog:
         if dataset_name not in self._datasets:
             raise KeyError(f"Dataset '{dataset_name}' missing from catalog.")
 
-        # Properly infers type as Dict[str, Any] matching function signature
         meta = self._datasets[dataset_name].copy()
         meta.pop("columns", None)
         return meta
@@ -114,6 +119,35 @@ class DataCatalog:
 
         return True
 
+    def _discover_catalog_path(self) -> str:
+        """Traverses parent directories upwards to locate the pyproject.toml file.
+
+        Once the layout anchor file is found, it automatically appends the standard
+        'conf/catalog' structural workspace mapping.
+
+        Returns:
+            str: Absolute path to the discovered catalog directory.
+
+        Raises:
+            FileNotFoundError: If the pyproject.toml configuration cannot be found.
+        """
+        current_dir = os.getcwd()
+
+        while True:
+            potential_toml = os.path.join(current_dir, "pyproject.toml")
+            if os.path.exists(potential_toml):
+                return os.path.join(current_dir, "conf", "catalog")
+
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:
+                break
+            current_dir = parent_dir
+
+        raise FileNotFoundError(
+            "Configuration file (pyproject.toml) could not be located. "
+            "Please run 'dex init' to establish a valid project layout."
+        )
+
     def _load_catalog_sources(self, path: str) -> None:
         """Internal worker to process and parse path targets recursively.
 
@@ -143,7 +177,6 @@ class DataCatalog:
         Returns:
             None: Updates the core datasets dictionary data states.
         """
-        # Explicit encoding set to utf-8 ensures cross-platform parsing safety
         with open(file_path, "r", encoding="utf-8") as stream:
             content = yaml.safe_load(stream)
 

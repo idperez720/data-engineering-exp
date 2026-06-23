@@ -11,12 +11,15 @@ requires-python = ">=3.11,<4.0.0"
 dependencies = [
     "pyspark (>=4.1.2,<5.0.0)",
     "pandas (>=3.0.3,<4.0.0)",
-    "pyyaml (>=6.0.3,<7.0.0)"
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "click (>=8.4.1,<9.0.0)"
 ]
 
 [tool.poetry]
 packages = [{ include = "data_engineering_exp" }]
 
+[project.scripts]
+dex = "data_engineering_exp.cli:entry_point"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15.18"
@@ -24,6 +27,7 @@ black = "^26.5.1"
 pylint = "^4.0.6"
 pytest = "^9.1.1"
 types-pyyaml = "^6.0.12.20260518"
+jupyter = "^1.1.1"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
