@@ -1,4 +1,4 @@
-"""This module implements versatile data deduplication utilities for dex."""
+"""This module implements versatile data deduplication utilities for flint."""
 
 from typing import Any, List, Optional, Union
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from data_engineering_exp.core.initializer import ProjectInitializer
+from flint_core.core.initializer import ProjectInitializer
 
 
 def test_project_initializer_scaffolding(tmp_path: Path) -> None:

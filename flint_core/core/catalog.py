@@ -1,4 +1,4 @@
-"""This module implements decentralized data catalog engines for dex."""
+"""This module implements decentralized data catalog engines for flint."""
 
 import os
 from typing import Any, Dict, List, Optional, cast
@@ -157,7 +157,7 @@ class DataCatalog:
 
         raise FileNotFoundError(
             "Configuration file (pyproject.toml) could not be located. "
-            "Please run 'dex init' to establish a valid project layout."
+            "Please run 'flint init' to establish a valid project layout."
         )
 
     def _load_catalog_sources(self, path: str) -> None:

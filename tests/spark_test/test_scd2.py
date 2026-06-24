@@ -9,7 +9,7 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from data_engineering_exp.spark_core.scd2 import SparkSCD2Processor
+from flint_core.spark_core.scd2 import SparkSCD2Processor
 
 
 @pytest.fixture(name="scd2_processor")

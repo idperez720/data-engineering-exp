@@ -1,4 +1,4 @@
-# Contributing to dex 🚀
+# Contributing to Flint 🚀
 
 First off, thank you for taking the time to contribute! Contributions are what make the open-source community such an amazing place to learn, inspire, and create. 
 
@@ -78,4 +78,4 @@ def look_up_root(path: str) -> str:
 
 ## ⚖️ License Note
 
-By contributing to `dex`, you agree that your contributions will be licensed under the project's **MIT License**. Your authorship will be recognized, but your code must safely carry the original liability waiver and copyright notice.
+By contributing to `flint`, you agree that your contributions will be licensed under the project's **MIT License**. Your authorship will be recognized, but your code must safely carry the original liability waiver and copyright notice.

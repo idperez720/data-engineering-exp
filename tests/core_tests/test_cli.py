@@ -1,10 +1,10 @@
-"""Unit tests for the Click-based dex Command Line Interface (CLI)."""
+"""Unit tests for the Click-based flint Command Line Interface (CLI)."""
 
 from pathlib import Path
 
 from click.testing import CliRunner
 
-from data_engineering_exp.cli import entry_point
+from flint_core.cli import entry_point
 
 
 def test_cli_init_command(tmp_path: Path) -> None:

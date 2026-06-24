@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from data_engineering_exp.pandas_core.scd2 import PandasSCD2Processor
+from flint_core.pandas_core.scd2 import PandasSCD2Processor
 
 
 @pytest.fixture(name="pandas_scd2_processor")

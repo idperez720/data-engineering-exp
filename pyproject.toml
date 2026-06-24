@@ -1,5 +1,5 @@
 [project]
-name = "data-engineering-exp"
+name = "flint-core"
 version = "0.1.0"
 description = "A minimalist, agnostic Python framework to standardize data engineering pipelines."
 authors = [
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-packages = [{ include = "data_engineering_exp" }]
+packages = [{ include = "flint_core" }]
 repository = "https://github.com/idperez720/data-engineering-exp"
 keywords = ["data-engineering", "pyspark", "pandas", "data-catalog"]
 classifiers = [
@@ -27,7 +27,7 @@ classifiers = [
 ]
 
 [project.scripts]
-dex = "data_engineering_exp.cli:entry_point"
+flint-core = "flint_core.cli:entry_point"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15.18"

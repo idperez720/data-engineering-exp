@@ -15,7 +15,7 @@ def spark_session():
     """
     spark = (
         SparkSession.builder.master("local[*]")
-        .appName("dex-test-suite")
+        .appName("flint-test-suite")
         .config("spark.sql.shuffle.partitions", "1")
         .getOrCreate()
     )

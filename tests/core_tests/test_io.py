@@ -6,8 +6,8 @@ from typing import Any, Tuple
 import pandas as pd
 import pytest
 
-from data_engineering_exp.core.catalog import DataCatalog
-from data_engineering_exp.core.io import DataLoader
+from flint_core.core.catalog import DataCatalog
+from flint_core.core.io import DataLoader
 
 
 @pytest.fixture(name="loader_setup")

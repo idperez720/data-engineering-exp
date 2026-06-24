@@ -1,15 +1,15 @@
-"""Command Line Interface (CLI) entry point for dex using Click."""
+"""Command Line Interface (CLI) entry point for flint using Click."""
 
 import os
 
 import click
 
-from data_engineering_exp.core.initializer import ProjectInitializer
+from flint_core.core.initializer import ProjectInitializer
 
 
 @click.group()
 def entry_point() -> None:
-    """dex - Data Engineering Experience CLI utilities.
+    """flint - Data Engineering Experience CLI utilities.
 
     Args:
 
@@ -35,19 +35,19 @@ def init(path: str) -> None:
     Returns:
         None: Side-effect creating folders and configurations.
     """
-    click.echo("🚀 Welcome to the dex project initialization wizard!\n")
+    click.echo("🚀 Welcome to the flint project initialization wizard!\n")
 
     # Derives default project name dynamically from the target directory name
     default_name = os.path.basename(os.path.abspath(path))
     if not default_name or default_name in (".", ""):
-        default_name = "my-dex-project"
+        default_name = "my-flint-project"
 
     # Sequential metadata prompts with default fallbacks
     name = click.prompt("Project name", default=default_name, type=str)
     version = click.prompt("Version", default="0.1.0", type=str)
     description = click.prompt(
         "Description",
-        default="Data engineering project scaffolded by dex",
+        default="Data engineering project scaffolded by flint",
         type=str,
     )
     author = click.prompt("Author", default="Anonymous", type=str)

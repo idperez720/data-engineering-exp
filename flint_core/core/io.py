@@ -1,11 +1,11 @@
-"""This module implements metadata-driven data loading utilities for dex."""
+"""This module implements metadata-driven data loading utilities for flint."""
 
 import os
 from typing import Any, Optional, cast
 
 import pandas as pd
 
-from data_engineering_exp.core.catalog import DataCatalog
+from flint_core.core.catalog import DataCatalog
 
 try:
     from pyspark.sql import SparkSession

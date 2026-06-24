@@ -1,4 +1,4 @@
-"""This module implements the project structural initialization engine for dex."""
+"""This module implements the project structural initialization engine for flint."""
 
 import os
 
@@ -24,19 +24,19 @@ class ProjectInitializer:
 
     def init_project(
         self,
-        name: str = "my-dex-project",
+        name: str = "my-flint-project",
         version: str = "0.1.0",
-        description: str = "Data engineering project scaffolded by dex",
+        description: str = "Data engineering project scaffolded by flint",
         author: str = "Anonymous",
     ) -> None:
         """Scaffolds the required folders and creates baseline configuration templates.
 
         Args:
             name(str): Operational name of the data project. Defaults to
-                "my-dex-project".
+                "my-flint-project".
             version(str): Initial semver string version. Defaults to "0.1.0".
             description(str): Short purpose statement describing the repository.
-                Defaults to "Data engineering project scaffolded by dex".
+                Defaults to "Data engineering project scaffolded by flint".
             author(str): Full name or alias identifier of the creator. Defaults
                 to "Anonymous".
 
@@ -79,7 +79,7 @@ class ProjectInitializer:
         )
         sample_content = (
             "sample_table:\n"
-            "  description: 'Boilerplate example dataset created by dex'\n"
+            "  description: 'Boilerplate example dataset created by flint'\n"
             "  format: 'csv'\n"
             "  engine: 'pandas'\n"
             "  storage_path: 'data/sample_table.csv'\n"

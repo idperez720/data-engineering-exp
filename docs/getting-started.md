@@ -1,17 +1,17 @@
 # 🏁 Getting Started
 
-This guide walks you through setting up a fresh data engineering workspace using `dex` from scratch.
+This guide walks you through setting up a fresh data engineering workspace using `flint` from scratch.
 
 ## 1. Project Scaffolding
 
 Navigate to a clean directory where you want to start your data platform project and run the interactive initializer wizard via the CLI:
 
 ```bash
-dex init
+flint init
 
 ```
 
-The wizard will prompt you for basic project metadata (Project Name, Version, Description, and Author) with smart fallbacks. Once completed, `dex` builds the following immutable convention-based layout:
+The wizard will prompt you for basic project metadata (Project Name, Version, Description, and Author) with smart fallbacks. Once completed, `flint` builds the following immutable convention-based layout:
 
 ```text
 your-project/
@@ -32,7 +32,7 @@ Open `conf/catalog/sample_dataset.yaml`. Your datasets are declared as logical k
 
 ```yaml
 sample_table:
-  description: 'Boilerplate example dataset created by dex'
+  description: 'Boilerplate example dataset created by flint'
   format: 'csv'
   engine: 'pandas'
   storage_path: 'data/sample_table.csv'
@@ -47,7 +47,7 @@ sample_table:
 Create a new Jupyter Notebook inside `src/notebooks/`. You do not need to hardcode brittle backtracking string paths (`../../data/...`) or handle configuration parsers. Simply initialize the engine:
 
 ```python
-from data_engineering_exp.core.io import DataLoader
+from flint_core.core.io import DataLoader
 
 # 1. Instantiate the loader (it automatically walks up to find pyproject.toml)
 loader = DataLoader()
@@ -72,11 +72,11 @@ sample_table_spark:
 
 ```
 
-Then launch your active session inside your notebook. `dex` is smart enough to auto-detect the global context without manual injections:
+Then launch your active session inside your notebook. `flint` is smart enough to auto-detect the global context without manual injections:
 
 ```python
 from pyspark.sql import SparkSession
-from data_engineering_exp.core.io import DataLoader
+from flint_core.core.io import DataLoader
 
 # Initialize local Spark
 spark = SparkSession.builder.master("local[*]").getOrCreate()

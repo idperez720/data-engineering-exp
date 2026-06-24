@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from data_engineering_exp.core.deduplication import Deduplicator
+from flint_core.core.deduplication import Deduplicator
 
 
 @pytest.fixture(name="deduplicator")

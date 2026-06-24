@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from data_engineering_exp.core.catalog import DataCatalog
+from flint_core.core.catalog import DataCatalog
 
 
 @pytest.fixture(name="catalog_dir_setup")
