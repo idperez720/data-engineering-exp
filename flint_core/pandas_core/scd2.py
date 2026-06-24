@@ -51,9 +51,7 @@ class PandasSCD2Processor:
         self.input_timestamp_col = input_timestamp_col
         self.max_date = max_date
 
-    def process(
-        self, df_new: pd.DataFrame, df_existing: pd.DataFrame
-    ) -> pd.DataFrame:
+    def process(self, df_new: pd.DataFrame, df_existing: pd.DataFrame) -> pd.DataFrame:
         """Orchestrates the SCD2 pipeline process and returns result.
 
         Args:
@@ -64,9 +62,7 @@ class PandasSCD2Processor:
             pd.DataFrame: Unified DataFrame with all processed records.
         """
         if not self.compare_columns:
-            raise ValueError(
-                "compare_columns cannot be empty for SCD2 processing."
-            )
+            raise ValueError("compare_columns cannot be empty for SCD2 processing.")
 
         # Filtrar solo los registros activos de la dimensión histórica
         # Avoid equality comparison to True; use truthiness check instead
@@ -89,15 +85,9 @@ class PandasSCD2Processor:
         # Construir cada segmento del SCD2
         df_new_only = self._get_new_records(df_new_idx, new_keys)
         df_changed = self._get_changed_records(df_new_idx, changed_keys)
-        df_expired = self._get_expired_records(
-            df_new_idx, df_exist_idx, changed_keys
-        )
-        df_unchanged = self._get_unchanged_records(
-            df_exist_idx, unchanged_keys
-        )
-        df_preserved = self._get_preserved_records(
-            df_exist_idx, preserved_keys
-        )
+        df_expired = self._get_expired_records(df_new_idx, df_exist_idx, changed_keys)
+        df_unchanged = self._get_unchanged_records(df_exist_idx, unchanged_keys)
+        df_preserved = self._get_preserved_records(df_exist_idx, preserved_keys)
 
         # Consolidar y ordenar columnas según el esquema original
         target_cols = df_existing.columns.tolist()
@@ -144,9 +134,7 @@ class PandasSCD2Processor:
             pd.DataFrame: Formatted dataframe for new insertions.
         """
         df_new_only = df_new_idx.loc[new_keys].reset_index()
-        df_new_only[self.effective_date_col] = df_new_only[
-            self.input_timestamp_col
-        ]
+        df_new_only[self.effective_date_col] = df_new_only[self.input_timestamp_col]
         df_new_only[self.end_date_col] = self.max_date
         df_new_only[self.current_flag_col] = True
         return df_new_only
@@ -164,9 +152,7 @@ class PandasSCD2Processor:
             pd.DataFrame: Formatted dataframe for updated active rows.
         """
         df_changed = df_new_idx.loc[changed_keys].reset_index()
-        df_changed[self.effective_date_col] = df_changed[
-            self.input_timestamp_col
-        ]
+        df_changed[self.effective_date_col] = df_changed[self.input_timestamp_col]
         df_changed[self.end_date_col] = self.max_date
         df_changed[self.current_flag_col] = True
         return df_changed

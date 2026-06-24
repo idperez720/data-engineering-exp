@@ -139,9 +139,7 @@ class SparkSCD2Processor:
             Column: PySpark Column representing the logical OR condition.
         """
         if not self.compare_columns:
-            raise ValueError(
-                "compare_columns cannot be empty for SCD2 processing."
-            )
+            raise ValueError("compare_columns cannot be empty for SCD2 processing.")
 
         # Inicializamos con la primera columna para asegurar un tipo Column
         first_col = self.compare_columns[0]
