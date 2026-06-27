@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, dev ]
     tags:
-      - 'v*' # Triggers the CD release phase when pushing tags like v0.1.0
+      - 'v*'
   pull_request:
     branches: [ main, dev ]
 
@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Run matrix checks matching flint-core target specifications
         python-version: ["3.11", "3.12"]
 
     steps:
@@ -41,7 +40,11 @@ jobs:
 
       - name: Install Project Dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --all-extras
+
+      - name: Ensure Extras are Installed
+        if: steps.cached-poetry-dependencies.outputs.cache-hit == 'true'
+        run: poetry install --no-interaction --no-root --all-extras
 
       - name: Run Ruff Linter Code Check
         run: poetry run ruff check ./flint_core/
@@ -50,14 +53,12 @@ jobs:
         run: poetry run ruff format --check ./flint_core/
 
       - name: Run Tests with Strict Coverage Gate (>= 10%)
-        # Specifies our package source target and enforces a hard fail threshold
         run: poetry run pytest --cov=flint_core --cov-fail-under=10
 
   deploy-pypi:
     name: Publish Artifact to PyPI
     needs: test-and-lint
     runs-on: ubuntu-latest
-    # 🌟 CRITICAL GATE: Only execute deployment if the push is an official 'v*' tag
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     
     steps:
@@ -76,13 +77,12 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Install Dependencies
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --all-extras
 
       - name: Build Package Distribution Binaries
         run: poetry build
 
       - name: Publish to PyPI Marketplace Index
         env:
-          # Automatically authenticates using your secure GitHub Repository Secret token
           POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
         run: poetry publish
