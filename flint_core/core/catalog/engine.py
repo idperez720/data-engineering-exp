@@ -5,14 +5,12 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import RLock
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
 from flint_core.core.catalog.descriptors import DatasetDescriptor
 from flint_core.core.catalog.models import ColumnDefinition, DatasetConfiguration
-
-# Centralized framework exceptions routing
 from flint_core.core.exceptions import CatalogParseError
 
 logger = logging.getLogger(__name__)
@@ -61,6 +59,27 @@ class DataCatalog:
             if dataset_name not in self._datasets:
                 raise KeyError(f"Dataset '{dataset_name}' missing from catalog.")
             return self._datasets[dataset_name]
+
+    def load(self, dataset_name: str, spark: Optional[Any] = None) -> Any:
+        """Unified framework facade entrypoint to load data assets directly from the catalog.
+
+        Unlocks the traditional interface style: catalog.load("sample_table")
+        Leverages lazy import execution blocks to prevent circular packages compilation errors.
+
+        Args:
+            dataset_name: Unique identity string registry key target.
+            spark: Optional distributed active SparkSession execution engine runner.
+
+        Returns:
+            Any: An evaluated Pandas or PySpark DataFrame matrix.
+        """
+        # Elite lazy import execution block to bypass compilation circular links
+        from flint_core.core.io import DataLoader
+
+        with self._lock:
+            # Reuses the exact infrastructure parameters avoiding context fragmentation
+            loader = DataLoader(catalog=self)
+            return loader.load(dataset_name, spark=spark)
 
     def reload_catalog(self, path: Path) -> None:
         """Rebuilds operational configurations safely separating threading memory boundaries."""
@@ -157,6 +176,7 @@ class DataCatalog:
                             file_path.name,
                         )
 
+                    # Pass self as catalog_ref to establish the live context dependency link
                     self._datasets[dataset_name] = DatasetConfiguration(
                         name=dataset_name,
                         engine=engine,
@@ -164,4 +184,5 @@ class DataCatalog:
                         storage_path=storage_path,
                         columns=column_definitions,
                         metadata=metadata_payload,
+                        catalog_ref=self,
                     )

@@ -38,7 +38,7 @@ classifiers = [
 ]
 
 [project.scripts]
-flint-core = "flint_core.cli:entry_point"
+flint = "flint_core.cli:entry_point"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15.18"
@@ -94,7 +94,9 @@ disable = [
     "too-many-locals",
     "too-many-positional-arguments",
     "duplicate-code",
-    "unnecessary-ellipsis"
+    "unnecessary-ellipsis",
+    "protected-access",
+    "import-outside-toplevel"
 ]
 
 [tool.pylint.FORMAT]
