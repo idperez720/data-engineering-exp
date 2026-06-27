@@ -2,16 +2,7 @@
 
 from __future__ import annotations
 
-from pyspark.sql import DataFrame as SparkDataFrame
+# Exposing the engine triggers the BaseEngine IoC initialization side-effect
+from flint_core.spark_core.engine import SparkEngine
 
-from flint_core.core.base import BaseEngine
-from flint_core.spark_core.deduplication import SparkDeduplicationMixin
-from flint_core.spark_core.scd2 import SparkSCD2Mixin
-
-
-class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataFrame]):
-    """
-    The unified, enterprise-scale PySpark engine assembled via modular Feature Mixins.
-    """
-
-    __slots__ = ()
+__all__ = ["SparkEngine"]
