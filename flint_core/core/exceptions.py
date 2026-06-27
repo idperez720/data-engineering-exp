@@ -17,3 +17,9 @@ class ColumnValidationError(FlintError):
     """Raised when dataframe columns fail schema or existence validations."""
 
     pass
+
+
+class CatalogParseError(FlintError):
+    """Raised when a YAML catalog file cannot be parsed due to syntax errors."""
+
+    pass

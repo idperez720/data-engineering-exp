@@ -51,6 +51,7 @@ mkdocs = "^1.6.1"
 mkdocs-material = "^9.7.6"
 mkdocstrings = {extras = ["python"], version = "^1.0.4"}
 pytest-cov = "^7.1.0"
+pytest-asyncio = "^1.4.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -105,6 +106,7 @@ markers = [
 ]
 testpaths = ["tests"]
 pythonpath = ["."]
+asyncio_mode = "auto"
 
 [tool.semantic_release]
 version_variable = "flint_core/__init__.py:__version__"
