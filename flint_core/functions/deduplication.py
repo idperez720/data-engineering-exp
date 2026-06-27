@@ -15,12 +15,8 @@ DataFrameT = TypeVar("DataFrameT", bound=Any)
 class DeduplicationProtocol(Protocol[DataFrameT]):
     """Structural protocol defining the contract for deduplication capabilities."""
 
-    def latest(
-        self, df: DataFrameT, keys: List[str], order_by_col: str
-    ) -> DataFrameT: ...
-    def first(
-        self, df: DataFrameT, keys: List[str], order_by_col: str
-    ) -> DataFrameT: ...
+    def latest(self, df: DataFrameT, keys: List[str], order_by_col: str) -> DataFrameT: ...
+    def first(self, df: DataFrameT, keys: List[str], order_by_col: str) -> DataFrameT: ...
     def by_order(
         self,
         df: DataFrameT,
@@ -62,15 +58,11 @@ def first(df: DataFrameT, keys: List[str], order_by_col: str) -> DataFrameT:
 
 
 @overload
-def by_order(
-    df: DataFrameT, keys: List[str], order_by_cols: List[str], ascending: bool = True
-) -> DataFrameT: ...
+def by_order(df: DataFrameT, keys: List[str], order_by_cols: List[str], ascending: bool = True) -> DataFrameT: ...
 
 
 @overload
-def by_order(
-    df: DataFrameT, keys: List[str], order_by_cols: List[str], ascending: List[bool]
-) -> DataFrameT: ...
+def by_order(df: DataFrameT, keys: List[str], order_by_cols: List[str], ascending: List[bool]) -> DataFrameT: ...
 
 
 def by_order(

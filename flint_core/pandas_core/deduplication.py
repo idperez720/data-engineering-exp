@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 class PandasDeduplicationMixin:
     """Provides deduplication capabilities to the main Pandas engine."""
 
-    def latest(
-        self, df: pd.DataFrame, keys: List[str], order_by_col: str
-    ) -> pd.DataFrame:
+    def latest(self, df: pd.DataFrame, keys: List[str], order_by_col: str) -> pd.DataFrame:
         """Extracts the most recent record per business key group via Pandas grouping.
 
         Args:
@@ -29,15 +27,9 @@ class PandasDeduplicationMixin:
         """
         self._validate_columns(df, keys + [order_by_col])  # type: ignore[attr-defined]
         logger.debug("Executing Pandas deduplication via 'latest'")
-        return (
-            df.sort_values(by=order_by_col, ascending=True)
-            .groupby(keys, as_index=False)
-            .last()
-        )
+        return df.sort_values(by=order_by_col, ascending=True).groupby(keys, as_index=False).last()
 
-    def first(
-        self, df: pd.DataFrame, keys: List[str], order_by_col: str
-    ) -> pd.DataFrame:
+    def first(self, df: pd.DataFrame, keys: List[str], order_by_col: str) -> pd.DataFrame:
         """Extracts the earliest chronological record per business key group via Pandas
         grouping.
 
@@ -52,11 +44,7 @@ class PandasDeduplicationMixin:
         """
         self._validate_columns(df, keys + [order_by_col])  # type: ignore[attr-defined]
         logger.debug("Executing Pandas deduplication via 'first'")
-        return (
-            df.sort_values(by=order_by_col, ascending=True)
-            .groupby(keys, as_index=False)
-            .first()
-        )
+        return df.sort_values(by=order_by_col, ascending=True).groupby(keys, as_index=False).first()
 
     def by_order(
         self,
@@ -89,11 +77,7 @@ class PandasDeduplicationMixin:
                 f"length of 'order_by_cols' ({len(order_by_cols)})."
             )
         logger.debug("Executing Pandas deduplication via custom 'by_order'")
-        return (
-            df.sort_values(by=order_by_cols, ascending=ascending)
-            .groupby(keys, as_index=False)
-            .first()
-        )
+        return df.sort_values(by=order_by_cols, ascending=ascending).groupby(keys, as_index=False).first()
 
     def combined(self, df: pd.DataFrame, keys: List[str]) -> pd.DataFrame:
         """Stitches rows together by compacting nulls into a single golden record using

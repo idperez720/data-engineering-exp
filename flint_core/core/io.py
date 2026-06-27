@@ -59,10 +59,7 @@ class DataLoader:
         path = meta.get("storage_path")
 
         if not engine or not data_format or not path:
-            raise KeyError(
-                f"Dataset '{dataset_name}' metadata must contain "
-                f"'engine', 'format', and 'storage_path'."
-            )
+            raise KeyError(f"Dataset '{dataset_name}' metadata must contain 'engine', 'format', and 'storage_path'.")
 
         # Convention resolution: anchor relative paths safely to project root
         if not os.path.isabs(path):
@@ -95,9 +92,7 @@ class DataLoader:
         else:
             raise ValueError(f"Unsupported Pandas format: '{data_format}'.")
 
-    def _load_with_spark(
-        self, path: str, data_format: str, spark: Optional[Any]
-    ) -> Any:
+    def _load_with_spark(self, path: str, data_format: str, spark: Optional[Any]) -> Any:
         """Internal worker to route reading operations to PySpark.
 
         Args:
@@ -122,8 +117,7 @@ class DataLoader:
 
         if session is None:
             raise ValueError(
-                "A valid SparkSession must be provided or active globally "
-                "to load data using the 'spark' engine."
+                "A valid SparkSession must be provided or active globally to load data using the 'spark' engine."
             )
 
         if data_format == "parquet":

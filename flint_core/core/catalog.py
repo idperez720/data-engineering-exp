@@ -54,9 +54,7 @@ class DataCatalog:
             self._find_project_root_from_path(resolved_path)
 
         if not resolved_path.exists():
-            raise FileNotFoundError(
-                f"Catalog source path not found at: {resolved_path}"
-            )
+            raise FileNotFoundError(f"Catalog source path not found at: {resolved_path}")
 
         self._load_catalog_sources(resolved_path)
 
@@ -133,8 +131,7 @@ class DataCatalog:
         missing_cols = expected_cols - actual_cols
         if missing_cols:
             raise ValueError(
-                f"Schema mismatch for '{dataset_name}'. "
-                f"Missing expected catalog columns: {list(missing_cols)}"
+                f"Schema mismatch for '{dataset_name}'. Missing expected catalog columns: {list(missing_cols)}"
             )
 
         return True
@@ -186,9 +183,7 @@ class DataCatalog:
                 content = yaml.safe_load(stream)
         except yaml.YAMLError as e:
             logger.error("Failed to parse YAML file at %s: %s", file_path, e)
-            raise CatalogParseError(
-                f"Syntax error in catalog file '{file_path.name}': {e}"
-            ) from e
+            raise CatalogParseError(f"Syntax error in catalog file '{file_path.name}': {e}") from e
 
         if content and isinstance(content, dict):
             typed_content = cast(dict[str, dict[str, Any]], content)
@@ -197,7 +192,7 @@ class DataCatalog:
             duplicates = set(typed_content.keys()) & set(self._datasets.keys())
             if duplicates:
                 logger.warning(
-                    "Duplicate dataset definitions detected and overwritten: %s found in '%s'", # noqa
+                    "Duplicate dataset definitions detected and overwritten: %s found in '%s'",  # noqa
                     duplicates,
                     file_path.name,
                 )
