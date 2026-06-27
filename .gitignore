@@ -9,6 +9,7 @@ __pycache__/
 .vscode/
 
 sandbox/
+dev_docs/
 
 # C extensions
 *.so
