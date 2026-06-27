@@ -52,8 +52,8 @@ jobs:
       - name: Run Ruff Code Formatter Check
         run: poetry run ruff format --check ./flint_core/
 
-      - name: Run Tests with Strict Coverage Gate (>= 10%)
-        run: poetry run pytest --cov=flint_core --cov-fail-under=10
+      - name: Run Tests with Strict Coverage Gate (>= 60%)
+        run: poetry run pytest --cov=flint_core --cov-fail-under=60
 
   deploy-pypi:
     name: Publish Artifact to PyPI
