@@ -96,12 +96,13 @@ class DataSaver:
             **runtime_options,
         }
 
-        # Dynamic routing leveraging EngineRegistry
+        # Dynamic routing leveraging EngineRegistry injecting catalog columns
         engine = EngineRegistry.get_engine(dataset.engine)
         engine.save(
             df=df,
             path=str(file_path),
             data_format=dataset.format,
+            columns=dataset.columns,
             mode=mode,
             metadata=combined_metadata,
             spark=spark,

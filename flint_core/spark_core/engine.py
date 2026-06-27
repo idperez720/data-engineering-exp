@@ -137,11 +137,12 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         df: SparkDataFrame,
         path: str,
         data_format: str,
+        columns: List[ColumnDefinition],
         mode: str = "error",
         metadata: Optional[Dict[str, Any]] = None,
         spark: Optional[Any] = None,
     ) -> None:
-        """Saves a PySpark DataFrame utilizing the DataFrameWriter API."""
+        """Saves a PySpark DataFrame enforcing schemas or falling back to raw."""
         from pyspark.sql import SparkSession
 
         # Resolve and heal potential ghost sessions dynamically via reflection
@@ -159,7 +160,56 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         options = metadata.get("options", {}) if metadata else {}
         fmt = data_format.strip().lower()
 
-        writer = df.write.mode(mode)
+        # Graceful degradation for Schema-less writes
+        if not columns:
+            df_enforced = df
+        else:
+            # 1. Structural schema verification
+            catalog_names = [col.name for col in columns]
+            missing_cols = [c for c in catalog_names if c not in df.columns]
+            if missing_cols:
+                raise ValueError(
+                    f"Schema enforcement failed on distributed write. Missing "
+                    f"catalog columns in input Spark DataFrame: {missing_cols}"
+                )
+
+            # 2. Filtering / Column selection (Drops extra columns gracefully)
+            df_enforced = df.select(*catalog_names)
+
+            spark_type_map: dict[str, DataType] = {
+                "string": StringType(),
+                "integer": IntegerType(),
+                "long": LongType(),
+                "double": DoubleType(),
+                "float": FloatType(),
+                "boolean": BooleanType(),
+                "timestamp": TimestampType(),
+                "date": DateType(),
+            }
+
+            # 3. Dynamic Write-Time Coercion
+            for col in columns:
+                if col.data_type is None:
+                    continue
+                dt_clean = col.data_type.strip().lower()
+
+                if dt_clean.startswith("decimal"):
+                    match = re.match(r"decimal\((\d+),?\s*(\d+)\)", dt_clean)
+                    if match:
+                        p, s = int(match.group(1)), int(match.group(2))
+                        s_type: DataType = DecimalType(p, s)
+                    else:
+                        s_type = DecimalType(38, 18)
+                else:
+                    s_type = spark_type_map.get(dt_clean, StringType())
+
+                if fmt in ("csv", "json") and col.format and (dt_clean in ("date", "timestamp")):
+                    df_enforced = df_enforced.withColumn(col.name, F.date_format(F.col(col.name), col.format))
+                else:
+                    df_enforced = df_enforced.withColumn(col.name, F.col(col.name).cast(s_type))
+
+        # 4. Distributed Persist Execution
+        writer = df_enforced.write.mode(mode)
         if options:
             writer = writer.options(**options)
 

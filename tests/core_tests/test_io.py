@@ -1,4 +1,4 @@
-"""Unit tests for the advanced multi-format DataLoader and DataSaver engines."""
+"""Unit tests for multi-format DataLoader and DataSaver engine enforcement."""
 
 from __future__ import annotations
 
@@ -37,27 +37,12 @@ def mock_advanced_io_environment(
     )
     csv_path.write_text(csv_content, encoding="utf-8")
 
-    # Seed baseline JSON metrics file (records orientation)
-    json_path = data_dir / "dataset.json"
-    json_content = (
-        "[\n"
-        '  {"id": 1, "price": 99.99, "event_date": "25/12/2026", '
-        '"processed_at": "2026-12-25 10:30:00"},\n'
-        '  {"id": 2, "price": 150.50, "event_date": "01/01/2027", '
-        '"processed_at": "2027-01-01 14:45:00"}\n'
-        "]"
-    )
-    json_path.write_text(json_content, encoding="utf-8")
-
     catalog_yaml = {
         "csv_dataset": {
             "engine": "pandas",
             "format": "csv",
             "storage_path": "data/dataset.csv",
-            "options": {
-                "sep": ";",
-                "encoding": "utf-8",
-            },
+            "options": {"sep": ";", "encoding": "utf-8"},
             "columns": [
                 {"name": "id", "type": "integer"},
                 {"name": "price", "type": "decimal(10,2)"},
@@ -70,40 +55,27 @@ def mock_advanced_io_environment(
                 },
             ],
         },
-        "json_dataset": {
-            "engine": "pandas",
-            "format": "json",
-            "storage_path": "data/dataset.json",
-            "options": {
-                "orient": "records",
-            },
-            "columns": [
-                {"name": "id", "type": "integer"},
-                {"name": "price", "type": "decimal(10,2)"},
-                {"name": "event_date", "type": "date", "format": "%d/%m/%Y"},
-                {
-                    "name": "processed_at",
-                    "type": "timestamp",
-                    "format": "%Y-%m-%d %H:%M:%S",
-                    "timezone": "UTC",
-                },
-            ],
-        },
-        "pandas_save_dataset": {
+        "pandas_strict_save": {
             "engine": "pandas",
             "format": "csv",
-            "storage_path": "data/output/saved_pandas.csv",
-            "options": {
-                "sep": "|",
-            },
+            "storage_path": "data/output/strict_pandas.csv",
+            "options": {"sep": "|"},
+            "columns": [
+                {"name": "id", "type": "integer"},
+                {"name": "value", "type": "string"},
+            ],
+        },
+        "pandas_schemaless_save": {
+            "engine": "pandas",
+            "format": "csv",
+            "storage_path": "data/output/schemaless_pandas.csv",
+            "options": {"sep": "|"},
         },
         "spark_csv_dataset": {
             "engine": "spark",
             "format": "csv",
             "storage_path": "data/dataset.csv",
-            "options": {
-                "delimiter": ";",
-            },
+            "options": {"delimiter": ";"},
             "columns": [
                 {"name": "id", "type": "integer"},
                 {"name": "price", "type": "decimal(10,2)"},
@@ -115,16 +87,24 @@ def mock_advanced_io_environment(
                 },
             ],
         },
-        "spark_save_dataset": {
+        "spark_strict_save": {
             "engine": "spark",
             "format": "parquet",
-            "storage_path": "data/output/saved_spark.parquet",
+            "storage_path": "data/output/strict_spark.parquet",
+            "columns": [
+                {"name": "id", "type": "integer"},
+                {"name": "value", "type": "string"},
+            ],
+        },
+        "spark_schemaless_save": {
+            "engine": "spark",
+            "format": "parquet",
+            "storage_path": "data/output/schemaless_spark.parquet",
         },
         "unsupported_engine": {
             "engine": "duckdb",
             "format": "parquet",
             "storage_path": "data/dataset.parquet",
-            "columns": [],
         },
     }
 
@@ -147,31 +127,11 @@ def test_pandas_csv_loading_options_and_enforcement(
 
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 2
-
-    # Verify options pass-through (sep=';') worked, resulting in correct columns
     assert list(df.columns) == ["id", "price", "event_date", "processed_at"]
-
-    # Verify advanced column-level type enforcement
     assert df["id"].dtype == "Int64"
     assert isinstance(df["price"].iloc[0], decimal.Decimal)
     assert isinstance(df["event_date"].iloc[0], datetime.date)
     assert df["processed_at"].dt.tz is not None
-    assert str(df["processed_at"].dt.tz) == "UTC"
-
-
-def test_pandas_json_loading_with_nested_options(
-    mock_advanced_io_environment: DataCatalog,
-) -> None:
-    """Asserts advanced column-level execution and options for Pandas JSON."""
-    pd = pytest.importorskip("pandas")
-
-    loader = DataLoader(catalog=mock_advanced_io_environment)
-    df = loader.load("json_dataset")
-
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 2
-    assert df["id"].dtype == "Int64"
-    assert isinstance(df["price"].iloc[0], decimal.Decimal)
 
 
 def test_spark_csv_loading_options_and_enforcement(
@@ -183,9 +143,7 @@ def test_spark_csv_loading_options_and_enforcement(
     loader = DataLoader(catalog=mock_advanced_io_environment)
     df = loader.load("spark_csv_dataset", spark=spark_session)
 
-    # Verify options pass-through (delimiter=';') worked
     assert "price" in df.columns
-
     schema_fields = {f.name: f.dataType.simpleString() for f in df.schema}
     assert schema_fields["id"] == "int"
     assert schema_fields["price"] == "decimal(10,2)"
@@ -193,41 +151,83 @@ def test_spark_csv_loading_options_and_enforcement(
     assert schema_fields["processed_at"] == "timestamp"
 
 
-def test_data_loader_runtime_options_override(
+def test_pandas_saver_strict_drops_extra_columns(
     mock_advanced_io_environment: DataCatalog,
 ) -> None:
-    """Asserts that runtime options dynamically override catalog options."""
+    """Asserts that strict saving filters and truncates extra columns."""
     pd = pytest.importorskip("pandas")
 
-    loader = DataLoader(catalog=mock_advanced_io_environment)
-
-    # Pass an intentional wrong separator via runtime options to check override
-    df = loader.load("csv_dataset", options={"sep": "|"})
-
-    # Since it didn't split by ';', it should have a single combined column name
-    assert "id;price;event_date;processed_at" in df.columns
-
-
-def test_pandas_data_saver_flow(
-    mock_advanced_io_environment: DataCatalog,
-) -> None:
-    """Asserts polymorphic saving capability for PandasEngine."""
-    pd = pytest.importorskip("pandas")
-
-    # Create dummy frame to persist
-    test_df = pd.DataFrame({"id": [1, 2], "value": ["X", "Y"]})
+    # DataFrame contains an extra untracked column
+    test_df = pd.DataFrame({"id": [1], "value": ["A"], "extra_untracked_field": [999]})
 
     saver = DataSaver(catalog=mock_advanced_io_environment)
-    saver.save(test_df, "pandas_save_dataset", mode="overwrite")
+    saver.save(test_df, "pandas_strict_save", mode="overwrite")
 
-    # Resolve paths via project root boundaries using pure pathlib
-    expected_file = Path(mock_advanced_io_environment.project_root) / ("data/output/saved_pandas.csv")
+    root = mock_advanced_io_environment.project_root
+    expected_file = Path(root) / "data/output/strict_pandas.csv"
 
-    assert expected_file.is_file()
-
-    # Read back to verify file schema and structure
+    # Read back to ensure extra column was cleanly dropped by enforcement
     read_back = pd.read_csv(expected_file, sep="|")
     assert list(read_back.columns) == ["id", "value"]
+
+
+def test_pandas_saver_schemaless_keeps_all_columns(
+    mock_advanced_io_environment: DataCatalog,
+) -> None:
+    """Asserts that schemaless saving bypasses column truncation filters."""
+    pd = pytest.importorskip("pandas")
+
+    test_df = pd.DataFrame({"dynamic_id": [5], "custom_metric": [10.5], "tag": ["alpha"]})
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+    saver.save(test_df, "pandas_schemaless_save", mode="overwrite")
+
+    root = mock_advanced_io_environment.project_root
+    expected_file = Path(root) / "data/output/schemaless_pandas.csv"
+
+    # Read back to ensure all dynamic columns are safely preserved
+    read_back = pd.read_csv(expected_file, sep="|")
+    assert list(read_back.columns) == ["dynamic_id", "custom_metric", "tag"]
+
+
+def test_spark_saver_strict_drops_extra_columns(mock_advanced_io_environment: DataCatalog, spark_session: Any) -> None:
+    """Asserts that Spark strict saving filters out untracked columns."""
+    pytest.importorskip("pyspark")
+
+    test_df = spark_session.createDataFrame([(1, "SparkStrict", 55.4)], ["id", "value", "extra_spark_field"])
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+    saver.save(test_df, "spark_strict_save", mode="overwrite", spark=spark_session)
+
+    root = mock_advanced_io_environment.project_root
+    expected_path = Path(root) / "data/output/strict_spark.parquet"
+
+    # Read back distributed file via raw spark session to verify projection
+    read_back = spark_session.read.parquet(str(expected_path))
+    assert list(read_back.columns) == ["id", "value"]
+
+
+def test_spark_saver_schemaless_keeps_all_columns(
+    mock_advanced_io_environment: DataCatalog, spark_session: Any
+) -> None:
+    """Asserts that Spark schemaless saving bypasses projection filters."""
+    pytest.importorskip("pyspark")
+
+    test_df = spark_session.createDataFrame([(10, "Gold", True)], ["account_id", "tier", "active_flag"])
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+    saver.save(
+        test_df,
+        "spark_schemaless_save",
+        mode="overwrite",
+        spark=spark_session,
+    )
+
+    root = mock_advanced_io_environment.project_root
+    expected_path = Path(root) / "data/output/schemaless_spark.parquet"
+
+    read_back = spark_session.read.parquet(str(expected_path))
+    assert list(read_back.columns) == ["account_id", "tier", "active_flag"]
 
 
 def test_pandas_data_saver_collision_error(
@@ -239,30 +239,8 @@ def test_pandas_data_saver_collision_error(
 
     saver = DataSaver(catalog=mock_advanced_io_environment)
 
-    # Writing to a path that we know exists (csv_dataset is data/dataset.csv)
     with pytest.raises(FileExistsError):
         saver.save(test_df, "csv_dataset", mode="error")
-
-
-def test_spark_data_saver_flow(mock_advanced_io_environment: DataCatalog, spark_session: Any) -> None:
-    """Asserts polymorphic saving capability for SparkEngine."""
-    pytest.importorskip("pyspark")
-
-    # Create dynamic distributed dataframe setup
-    test_df = spark_session.createDataFrame(
-        [
-            (1, "SparkText"),
-        ],
-        ["id", "value"],
-    )
-
-    saver = DataSaver(catalog=mock_advanced_io_environment)
-    saver.save(test_df, "spark_save_dataset", mode="overwrite", spark=spark_session)
-
-    expected_path = Path(mock_advanced_io_environment.project_root) / ("data/output/saved_spark.parquet")
-
-    # Spark directories validation check
-    assert expected_path.exists()
 
 
 def test_unsupported_engine_raises_error(

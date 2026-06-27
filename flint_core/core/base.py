@@ -124,6 +124,7 @@ class BaseEngine(abc.ABC, Generic[DataFrameT]):
         df: Any,
         path: str,
         data_format: str,
+        columns: List[ColumnDefinition],
         mode: str = "error",
         metadata: Optional[Dict[str, Any]] = None,
         spark: Optional[Any] = None,
