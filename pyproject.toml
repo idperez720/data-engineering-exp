@@ -3,21 +3,32 @@ name = "flint-core"
 version = "0.1.0"
 description = "A minimalist, agnostic Python framework to standardize data engineering pipelines."
 authors = [
-    {name = "idperez720",email = "ivandavidperez4@gmail.com"}
+    {name = "idperez720", email = "ivandavidperez4@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.11,<4.0.0"
+
 dependencies = [
-    "pyspark (>=4.1.2,<5.0.0)",
-    "pandas (>=3.0.3,<4.0.0)",
     "pyyaml (>=6.0.3,<7.0.0)",
     "click (>=8.4.1,<9.0.0)"
 ]
 
+[project.optional-dependencies]
+pandas = [
+    "pandas (>=3.0.3,<4.0.0)"
+]
+spark = [
+    "pyspark (>=4.1.2,<5.0.0)"
+]
+all = [
+    "pandas (>=3.0.3,<4.0.0)",
+    "pyspark (>=4.1.2,<5.0.0)"
+]
+
 [tool.poetry]
 packages = [{ include = "flint_core" }]
-repository = "https://github.com/idperez720/data-engineering-exp"
+repository = "https://github.com/idperez720/flint-core"
 keywords = ["data-engineering", "pyspark", "pandas", "data-catalog"]
 classifiers = [
     "Programming Language :: Python :: 3.11",
@@ -46,11 +57,11 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
-line-length = 88
+line-length = 120
 target-version = ['py311']
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py311"
 extend-exclude = ["migrations", "alembic"]
 
@@ -59,7 +70,7 @@ select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
-known-first-party = ["business", "core", "interfaces", "integrations"]
+known-first-party = ["flint_core"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -85,7 +96,7 @@ disable = [
 ]
 
 [tool.pylint.FORMAT]
-max-line-length = 88
+max-line-length = 120
 
 [tool.pytest.ini_options]
 markers = [
