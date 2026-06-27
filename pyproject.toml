@@ -93,6 +93,7 @@ disable = [
     "too-many-locals",
     "too-many-positional-arguments",
     "duplicate-code",
+    "unnecessary-ellipsis"
 ]
 
 [tool.pylint.FORMAT]
