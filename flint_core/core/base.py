@@ -112,6 +112,7 @@ class BaseEngine(abc.ABC, Generic[DataFrameT]):
         path: str,
         data_format: str,
         columns: List[ColumnDefinition],
+        metadata: Optional[Dict[str, Any]] = None,
         spark: Optional[Any] = None,
     ) -> Any:
         """Abstract requirement for data loading and schema enforcement."""

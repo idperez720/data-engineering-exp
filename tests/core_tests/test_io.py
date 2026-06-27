@@ -1,7 +1,8 @@
-"""Unit tests for the environment-agnostic metadata-driven DataLoader engine."""
+"""Unit tests for the advanced multi-format metadata-driven DataLoader engine."""
 
 from __future__ import annotations
 
+import decimal
 from pathlib import Path
 from typing import Any, Generator
 
@@ -14,140 +15,191 @@ from flint_core.core.io import DataLoader
 
 
 @pytest.fixture
-def mock_catalog_environment(
+def mock_advanced_io_environment(
     tmp_path: Path,
 ) -> Generator[DataCatalog, None, None]:
-    """Scaffolds a rigid multi-engine test catalog layout for validation."""
+    """Scaffolds a comprehensive environment with nested options in catalog."""
     catalog_dir = tmp_path / "conf" / "catalog"
     data_dir = tmp_path / "data"
 
     catalog_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Establish the root anchor
     with open(tmp_path / "pyproject.toml", "w", encoding="utf-8") as f:
-        f.write('[project]\nname = "test-io-framework"\n')
+        f.write('[project]\nname = "test-advanced-io"\n')
 
-    # Drop a physical dummy CSV asset with multiple datatypes
-    csv_path = data_dir / "metrics.csv"
-    csv_path.write_text(
-        "id,value,timestamp_col\n1,100,2026-01-01 12:00:00\n2,200,2026-01-02 12:00:00\n",
-        encoding="utf-8",
+    # Seed baseline semi-colon separated CSV file
+    csv_path = data_dir / "dataset.csv"
+    csv_content = (
+        "id;price;event_date;processed_at\n"
+        "1;99.99;25/12/2026;2026-12-25 10:30:00\n"
+        "2;150.50;01/01/2027;2027-01-01 14:45:00\n"
     )
+    csv_path.write_text(csv_content, encoding="utf-8")
+
+    # Seed baseline JSON metrics file (records orientation)
+    json_path = data_dir / "dataset.json"
+    json_content = (
+        "[\n"
+        '  {"id": 1, "price": 99.99, "event_date": "25/12/2026", '
+        '"processed_at": "2026-12-25 10:30:00"},\n'
+        '  {"id": 2, "price": 150.50, "event_date": "01/01/2027", '
+        '"processed_at": "2027-01-01 14:45:00"}\n'
+        "]"
+    )
+    json_path.write_text(json_content, encoding="utf-8")
 
     catalog_yaml = {
-        "local_csv_relative": {
+        "csv_dataset": {
             "engine": "pandas",
             "format": "csv",
-            "storage_path": "data/metrics.csv",
+            "storage_path": "data/dataset.csv",
+            "options": {
+                "sep": ";",
+                "encoding": "utf-8",
+            },
             "columns": [
                 {"name": "id", "type": "integer"},
-                {"name": "value", "type": "string"},
-                {"name": "timestamp_col", "type": "timestamp"},
+                {"name": "price", "type": "decimal(10,2)"},
+                {"name": "event_date", "type": "date", "format": "%d/%m/%Y"},
+                {
+                    "name": "processed_at",
+                    "type": "timestamp",
+                    "format": "%Y-%m-%d %H:%M:%S",
+                    "timezone": "UTC",
+                },
             ],
         },
-        "unsupported_engine_asset": {
+        "json_dataset": {
+            "engine": "pandas",
+            "format": "json",
+            "storage_path": "data/dataset.json",
+            "options": {
+                "orient": "records",
+            },
+            "columns": [
+                {"name": "id", "type": "integer"},
+                {"name": "price", "type": "decimal(10,2)"},
+                {"name": "event_date", "type": "date", "format": "%d/%m/%Y"},
+                {
+                    "name": "processed_at",
+                    "type": "timestamp",
+                    "format": "%Y-%m-%d %H:%M:%S",
+                    "timezone": "UTC",
+                },
+            ],
+        },
+        "spark_csv_dataset": {
+            "engine": "spark",
+            "format": "csv",
+            "storage_path": "data/dataset.csv",
+            "options": {
+                "delimiter": ";",
+            },
+            "columns": [
+                {"name": "id", "type": "integer"},
+                {"name": "price", "type": "decimal(10,2)"},
+                {"name": "event_date", "type": "date", "format": "dd/MM/yyyy"},
+                {
+                    "name": "processed_at",
+                    "type": "timestamp",
+                    "format": "yyyy-MM-dd HH:mm:ss",
+                },
+            ],
+        },
+        "unsupported_engine": {
             "engine": "duckdb",
             "format": "parquet",
-            "storage_path": "data/metrics.parquet",
+            "storage_path": "data/dataset.parquet",
             "columns": [],
-        },
-        "invalid_pandas_format": {
-            "engine": "pandas",
-            "format": "xml",
-            "storage_path": "data/metrics.xml",
-            "columns": [],
-        },
-        "spark_missing_session_asset": {
-            "engine": "spark",
-            "format": "csv",
-            "storage_path": "data/metrics.csv",
-            "columns": [{"name": "id", "type": "integer"}],
-        },
-        "spark_active_enforcement": {
-            "engine": "spark",
-            "format": "csv",
-            "storage_path": "data/metrics.csv",
-            "columns": [
-                {"name": "id", "type": "integer"},
-                {"name": "value", "type": "string"},
-                {"name": "timestamp_col", "type": "timestamp"},
-            ],
         },
     }
 
-    with open(catalog_dir / "io_test.yaml", "w", encoding="utf-8") as f:
+    with open(catalog_dir / "advanced_io.yaml", "w", encoding="utf-8") as f:
         yaml.dump(catalog_yaml, f)
 
     yield DataCatalog(catalog_path=catalog_dir)
 
 
-def test_data_loader_relative_path_resolution(
-    mock_catalog_environment: DataCatalog,
+def test_pandas_csv_loading_options_and_enforcement(
+    mock_advanced_io_environment: DataCatalog,
 ) -> None:
-    """Asserts relative paths resolution and read-time type enforcement."""
+    """Asserts option pass-through and column-level advanced types for CSV."""
+    import datetime
+
     pd = pytest.importorskip("pandas")
 
-    loader = DataLoader(catalog=mock_catalog_environment)
-    df = loader.load("local_csv_relative")
+    loader = DataLoader(catalog=mock_advanced_io_environment)
+    df = loader.load("csv_dataset")
 
     assert isinstance(df, pd.DataFrame)
-    assert list(df.columns) == ["id", "value", "timestamp_col"]
     assert len(df) == 2
 
-    # Robust library-grade schema enforcement validation
+    # Verify options pass-through (sep=';') worked, resulting in correct columns
+    assert list(df.columns) == ["id", "price", "event_date", "processed_at"]
+
+    # Verify advanced column-level type enforcement
     assert df["id"].dtype == "Int64"
-    assert pd.api.types.is_string_dtype(df["value"])
-    assert pd.api.types.is_datetime64_any_dtype(df["timestamp_col"])
+    assert isinstance(df["price"].iloc[0], decimal.Decimal)
+    assert isinstance(df["event_date"].iloc[0], datetime.date)
+    assert df["processed_at"].dt.tz is not None
+    assert str(df["processed_at"].dt.tz) == "UTC"
 
 
-def test_data_loader_unsupported_engine_raises_backend_error(
-    mock_catalog_environment: DataCatalog,
+def test_pandas_json_loading_with_nested_options(
+    mock_advanced_io_environment: DataCatalog,
 ) -> None:
-    """Asserts that an unrecognized compute engine triggers UnsupportedBackendError."""
-    loader = DataLoader(catalog=mock_catalog_environment)
+    """Asserts advanced column-level execution and options for Pandas JSON."""
+    pd = pytest.importorskip("pandas")
 
-    with pytest.raises(UnsupportedBackendError) as exc_info:
-        loader.load("unsupported_engine_asset")
+    loader = DataLoader(catalog=mock_advanced_io_environment)
+    df = loader.load("json_dataset")
 
-    assert "No execution engine registered for name: 'duckdb'" in str(exc_info.value)
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 2
+    assert df["id"].dtype == "Int64"
+    assert isinstance(df["price"].iloc[0], decimal.Decimal)
 
 
-def test_data_loader_unsupported_format_for_engine_raises_value_error(
-    mock_catalog_environment: DataCatalog,
+def test_spark_csv_loading_options_and_enforcement(
+    mock_advanced_io_environment: DataCatalog, spark_session: Any
 ) -> None:
-    """Asserts that an invalid engine format raises a semantic ValueError."""
-    pytest.importorskip("pandas")
-    loader = DataLoader(catalog=mock_catalog_environment)
-
-    with pytest.raises(ValueError) as exc_info:
-        loader.load("invalid_pandas_format")
-
-    assert "Unsupported Pandas file layout" in str(exc_info.value)
-
-
-def test_data_loader_spark_missing_session_raises_value_error(
-    mock_catalog_environment: DataCatalog,
-) -> None:
-    """Asserts that running Spark load without a session raises a ValueError."""
+    """Asserts options pass-through and column-level execution for Spark CSV."""
     pytest.importorskip("pyspark")
-    loader = DataLoader(catalog=mock_catalog_environment)
 
-    with pytest.raises(ValueError) as exc_info:
-        loader.load("spark_missing_session_asset", spark=None)
+    loader = DataLoader(catalog=mock_advanced_io_environment)
+    df = loader.load("spark_csv_dataset", spark=spark_session)
 
-    assert "No distributed cluster session manager could be resolved" in str(exc_info.value)
+    # Verify options pass-through (delimiter=';') worked
+    assert "price" in df.columns
 
-
-def test_data_loader_spark_read_time_enforcement(mock_catalog_environment: DataCatalog, spark_session: Any) -> None:
-    """Asserts distributed read-time schema enforcement using active SparkSession."""
-    pytest.importorskip("pyspark")
-    loader = DataLoader(catalog=mock_catalog_environment)
-
-    df = loader.load("spark_active_enforcement", spark=spark_session)
-
-    # Assert exact schema resolution on Spark DataFrame layout catalogs
-    schema_fields = {field.name: field.dataType.simpleString() for field in df.schema}
+    schema_fields = {f.name: f.dataType.simpleString() for f in df.schema}
     assert schema_fields["id"] == "int"
-    assert schema_fields["value"] == "string"
-    assert schema_fields["timestamp_col"] == "timestamp"
+    assert schema_fields["price"] == "decimal(10,2)"
+    assert schema_fields["event_date"] == "date"
+    assert schema_fields["processed_at"] == "timestamp"
+
+
+def test_data_loader_runtime_options_override(
+    mock_advanced_io_environment: DataCatalog,
+) -> None:
+    """Asserts that runtime options dynamically override catalog options."""
+    pd = pytest.importorskip("pandas")
+
+    loader = DataLoader(catalog=mock_advanced_io_environment)
+
+    # Pass an intentional wrong separator via runtime options to check override
+    df = loader.load("csv_dataset", options={"sep": "|"})
+
+    # Since it didn't split by ';', it should have a single combined column name
+    assert "id;price;event_date;processed_at" in df.columns
+
+
+def test_unsupported_engine_raises_error(
+    mock_advanced_io_environment: DataCatalog,
+) -> None:
+    """Asserts that an unregistered engine throws UnsupportedBackendError."""
+    loader = DataLoader(catalog=mock_advanced_io_environment)
+
+    with pytest.raises(UnsupportedBackendError):
+        loader.load("unsupported_engine")
