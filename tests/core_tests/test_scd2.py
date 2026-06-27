@@ -8,7 +8,7 @@ import pytest
 
 # Core architecture imports
 from flint_core.core.exceptions import ColumnValidationError
-from flint_core.core.scd2 import process
+from flint_core.functions.scd2 import process
 
 try:
     import pandas as pd

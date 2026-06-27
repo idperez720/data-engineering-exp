@@ -9,9 +9,10 @@ from typing import Any, Dict, List
 
 import pytest
 
-# Core architecture imports
-from flint_core.core.deduplication import by_order, combined, first, latest
 from flint_core.core.exceptions import ColumnValidationError, UnsupportedBackendError
+
+# Core architecture imports
+from flint_core.functions.deduplication import by_order, combined, first, latest
 
 # Safely check for pandas and spark availability for conditional test execution
 try:
@@ -120,9 +121,7 @@ def spark_df(spark_session: SparkSession, mock_raw_data: List[Dict[str, Any]]) -
 
 def test_unsupported_backend_raises_error() -> None:
     """Validates that passing a raw unmapped object triggers UnsupportedBackendError."""
-    invalid_data = {
-        "key": "value"
-    }  # Dicts are not registered inside our EngineRegistry
+    invalid_data = {"key": "value"}  # Dicts are not registered inside our EngineRegistry
 
     with pytest.raises(UnsupportedBackendError) as exc_info:
         latest(invalid_data, keys=["id"], order_by_col="updated_at")
