@@ -1,108 +1,249 @@
-"""Unit tests for all five methods of the Deduplicator core class."""
+"""
+Unit tests for the flint-core deduplication engine and facade routing
+capabilities.
+"""
 
-import pandas as pd
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
 import pytest
 
-from flint_core.core.deduplication import Deduplicator
+from flint_core.core.exceptions import ColumnValidationError, UnsupportedBackendError
+
+# Core architecture imports
+from flint_core.functions.deduplication import by_order, combined, first, latest
+
+# Safely check for pandas and spark availability for conditional test execution
+try:
+    import pandas as pd
+
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+
+try:
+    import pyspark.sql.functions as F
+    from pyspark.sql import SparkSession
+
+    HAS_SPARK = True
+except ImportError:
+    HAS_SPARK = False
 
 
-@pytest.fixture(name="deduplicator")
-def fixture_deduplicator():
-    """Initializes the core deduplicator utility.
+# --- PYTEST FIXTURES ---
 
-    Args:
+
+@pytest.fixture
+def mock_raw_data() -> List[Dict[str, Any]]:
+    """Provides a standardized matrix of raw dictionary records containing duplicates.
 
     Returns:
-        Deduplicator: An instance of the Deduplicator class.
+        List[Dict[str, Any]]: Baseline mock records for engineering pipelines.
     """
-    return Deduplicator()
-
-
-def test_pandas_deduplication_suite(deduplicator):
-    """Tests all 5 deduplication methods using the Pandas engine."""
-    # Base dataset for chronological and structural drops
-    base_data = {
-        "id": [1, 1, 2, 2],
-        "val": ["A", "B", "C", "C"],
-        "ts": ["2026-01-01", "2026-01-02", "2026-01-01", "2026-01-01"],
-    }
-    df_base = pd.DataFrame(base_data)
-
-    # 1. Test latest
-    df_latest = deduplicator.latest(df_base, keys=["id"], order_by_col="ts")
-    assert df_latest[df_latest["id"] == 1].iloc[0]["val"] == "B"
-
-    # 2. Test first
-    df_first = deduplicator.first(df_base, keys=["id"], order_by_col="ts")
-    assert df_first[df_first["id"] == 1].iloc[0]["val"] == "A"
-
-    # 3. Test distinct
-    df_distinct = deduplicator.distinct(df_base)
-    assert len(df_distinct) == 3
-
-    # 4. Test by_order (Advanced multi-sorting)
-    sort_data = {
-        "id": [1, 1],
-        "is_verified": [False, True],
-        "score": [10, 5],
-    }
-    df_sort = pd.DataFrame(sort_data)
-    df_res = deduplicator.by_order(
-        df_sort, keys=["id"], order_by_cols=["is_verified"], ascending=False
-    )
-    assert df_res.iloc[0]["is_verified"]
-
-    # 5. Test combined (Row stitching/consolidation)
-    stitch_data = {
-        "id": [3, 3],
-        "email": ["target@test.com", None],
-        "phone": [None, "555-1234"],
-    }
-    df_stitch = pd.DataFrame(stitch_data)
-    df_comb = deduplicator.combined(df_stitch, keys=["id"])
-    assert df_comb.iloc[0]["email"] == "target@test.com"
-    assert df_comb.iloc[0]["phone"] == "555-1234"
-
-
-def test_spark_deduplication_suite(spark_session, deduplicator):
-    """Tests all 5 deduplication methods using the PySpark engine."""
-    # Base dataset for chronological and structural drops
-    base_data = [
-        (1, "A", "2026-01-01"),
-        (1, "B", "2026-01-02"),
-        (2, "C", "2026-01-01"),
-        (2, "C", "2026-01-01"),
+    return [
+        {
+            "id": 1,
+            "state": "TX",
+            "updated_at": "2026-01-01",
+            "score": 10,
+            "note": "oldest",
+        },
+        {"id": 1, "state": "TX", "updated_at": "2026-06-01", "score": 30, "note": None},
+        {
+            "id": 1,
+            "state": "TX",
+            "updated_at": "2026-03-01",
+            "score": 20,
+            "note": "middle",
+        },
+        {
+            "id": 2,
+            "state": "CA",
+            "updated_at": "2026-05-01",
+            "score": 50,
+            "note": "active",
+        },
     ]
-    schema_base = ["id", "val", "ts"]
-    df_base = spark_session.createDataFrame(base_data, schema=schema_base)
 
-    # 1. Test latest
-    res_latest = deduplicator.latest(df_base, keys=["id"], order_by_col="ts").collect()
-    row_1_l = [r for r in res_latest if r["id"] == 1][0]
-    assert row_1_l["val"] == "B"
 
-    # 2. Test first
-    res_first = deduplicator.first(df_base, keys=["id"], order_by_col="ts").collect()
-    row_1_f = [r for r in res_first if r["id"] == 1][0]
-    assert row_1_f["val"] == "A"
+@pytest.fixture
+def pandas_df(mock_raw_data: List[Dict[str, Any]]) -> pd.DataFrame:
+    """Converts mock matrix into a standard local Pandas DataFrame.
 
-    # 3. Test distinct
-    res_distinct = deduplicator.distinct(df_base).collect()
-    assert len(res_distinct) == 3
+    Args:
+        mock_raw_data: Baseline raw dictionary records.
 
-    # 4. Test by_order (Advanced multi-sorting)
-    sort_data = [(1, False, 10), (1, True, 5)]
-    schema_sort = ["id", "is_verified", "score"]
-    df_sort = spark_session.createDataFrame(sort_data, schema=schema_sort)
-    res_sort = deduplicator.by_order(
-        df_sort, keys=["id"], order_by_cols=["is_verified"], ascending=False
-    ).collect()
-    assert res_sort[0]["is_verified"]
+    Returns:
+        pd.DataFrame: Active pandas structural matrix.
+    """
+    if not HAS_PANDAS:
+        pytest.skip("Pandas environment dependency is absent.")
+    return pd.DataFrame(mock_raw_data)
 
-    # 5. Test combined (Row stitching/consolidation)
-    stitch_data = [(3, "target@test.com", None), (3, None, "555-1234")]
-    schema_stitch = ["id", "email", "phone"]
-    df_stitch = spark_session.createDataFrame(stitch_data, schema=schema_stitch)
-    res_comb = deduplicator.combined(df_stitch, keys=["id"]).collect()
-    assert res_comb[0]["email"] == "target@test.com"
-    assert res_comb[0]["phone"] == "555-1234"
+
+@pytest.fixture(scope="module")
+def spark_session() -> SparkSession:  # type: ignore
+    """Initializes a local, thread-isolated active Spark Session for testing scopes.
+
+    Yields:
+        SparkSession: Context engine for distributed data frames operations.
+    """
+    if not HAS_SPARK:
+        pytest.skip("PySpark environment dependency is absent.")
+
+    session = (
+        SparkSession.builder.appName("FlintUnitTests")
+        .master("local[1]")
+        .config("spark.sql.shuffle.partitions", "1")
+        .getOrCreate()
+    )
+    yield session
+    session.stop()
+
+
+@pytest.fixture
+def spark_df(spark_session: SparkSession, mock_raw_data: List[Dict[str, Any]]) -> Any:
+    """Converts mock matrix into an active distributed PySpark DataFrame plan.
+
+    Args:
+        spark_session: Active isolation framework cluster reference.
+        mock_raw_data: Baseline raw dictionary records.
+
+    Returns:
+        SparkDataFrame: Evaluated distributed dataframe reference.
+    """
+    return spark_session.createDataFrame(mock_raw_data)  # type: ignore
+
+
+# --- ARCHITECTURAL ROUTING & EDGE CASE TESTS ---
+
+
+def test_unsupported_backend_raises_error() -> None:
+    """Validates that passing a raw unmapped object triggers UnsupportedBackendError."""
+    invalid_data = {"key": "value"}  # Dicts are not registered inside our EngineRegistry
+
+    with pytest.raises(UnsupportedBackendError) as exc_info:
+        latest(invalid_data, keys=["id"], order_by_col="updated_at")
+
+    assert "No execution engine registered" in str(exc_info.value)
+
+
+def test_column_validation_raises_error(pandas_df: pd.DataFrame) -> None:
+    """Validates that tracking non-existent columns triggers a ColumnValidationError."""
+    with pytest.raises(ColumnValidationError) as exc_info:
+        latest(pandas_df, keys=["non_existent_key"], order_by_col="updated_at")
+
+    assert "required columns are missing" in str(exc_info.value)
+
+
+def test_by_order_length_mismatch_raises_error(pandas_df: pd.DataFrame) -> None:
+    """
+    Validates that sorting sequence mismatches with ascending configuration arrays fail.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        by_order(
+            pandas_df,
+            keys=["id"],
+            order_by_cols=["score", "updated_at"],
+            ascending=[True],
+        )
+
+    assert "Length of 'ascending' list" in str(exc_info.value)
+
+
+# --- PANDAS CORE ALGORITHMIC TESTS ---
+
+
+@pytest.mark.skipif(not HAS_PANDAS, reason="Pandas is required to run this assertion.")
+def test_pandas_latest_deduplication(pandas_df: pd.DataFrame) -> None:
+    """
+    Asserts that latest() retains the latest chronological record on Pandas backend.
+    """
+    result = latest(pandas_df, keys=["id", "state"], order_by_col="updated_at")
+
+    # Assert row count reduction (should compact id=1 down to 1 record, total 2 rows)
+    assert len(result) == 2
+
+    # Assert correct value capturing (id=1 latest update is 2026-06-01 with score 30)
+    target_row = result[result["id"] == 1].iloc[0]
+    assert target_row["updated_at"] == "2026-06-01"
+    assert target_row["score"] == 30
+
+
+@pytest.mark.skipif(not HAS_PANDAS, reason="Pandas is required to run this assertion.")
+def test_pandas_first_deduplication(pandas_df: pd.DataFrame) -> None:
+    """
+    Asserts that first() retains the earliest chronological record on Pandas backend.
+    """
+    result = first(pandas_df, keys=["id", "state"], order_by_col="updated_at")
+
+    assert len(result) == 2
+    target_row = result[result["id"] == 1].iloc[0]
+    assert target_row["updated_at"] == "2026-01-01"
+    assert target_row["score"] == 10
+
+
+@pytest.mark.skipif(not HAS_PANDAS, reason="Pandas is required to run this assertion.")
+def test_pandas_by_order_custom_sort(pandas_df: pd.DataFrame) -> None:
+    """
+    Asserts that by_order() honors compound multi-column prioritizing arrays in Pandas.
+    """
+    # Prioritize highest score first (ascending=False)
+    result = by_order(pandas_df, keys=["id"], order_by_cols=["score"], ascending=False)
+
+    target_row = result[result["id"] == 1].iloc[0]
+    assert target_row["score"] == 30
+
+
+@pytest.mark.skipif(not HAS_PANDAS, reason="Pandas is required to run this assertion.")
+def test_pandas_combined_golden_record(pandas_df: pd.DataFrame) -> None:
+    """Asserts that combined() synthesizes golden records ignoring inner nulls in Pandas."""
+    result = combined(pandas_df, keys=["id"])
+
+    target_row = result[result["id"] == 1].iloc[0]
+    # Should resolve the first non-null record for structural columns
+    assert target_row["note"] == "oldest"
+
+
+# --- SPARK CORE ALGORITHMIC TESTS ---
+
+
+@pytest.mark.skipif(not HAS_SPARK, reason="PySpark is required to run this assertion.")
+def test_spark_latest_deduplication(spark_df: Any) -> None:
+    """Asserts that latest() retains the latest chronological record on Spark execution context."""
+    result = latest(spark_df, keys=["id", "state"], order_by_col="updated_at")
+
+    assert result.count() == 2
+    target_row = result.filter(F.col("id") == 1).collect()[0]
+    assert target_row["updated_at"] == "2026-06-01"
+    assert target_row["score"] == 30
+
+
+@pytest.mark.skipif(not HAS_SPARK, reason="PySpark is required to run this assertion.")
+def test_spark_first_deduplication(spark_df: Any) -> None:
+    """Asserts that first() retains the earliest chronological record on Spark execution context."""
+    result = first(spark_df, keys=["id", "state"], order_by_col="updated_at")
+
+    assert result.count() == 2
+    target_row = result.filter(F.col("id") == 1).collect()[0]
+    assert target_row["updated_at"] == "2026-01-01"
+    assert target_row["score"] == 10
+
+
+@pytest.mark.skipif(not HAS_SPARK, reason="PySpark is required to run this assertion.")
+def test_spark_by_order_custom_sort(spark_df: Any) -> None:
+    """Asserts that by_order() honors compound multi-column prioritizing arrays in Spark."""
+    result = by_order(spark_df, keys=["id"], order_by_cols=["score"], ascending=False)
+
+    target_row = result.filter(F.col("id") == 1).collect()[0]
+    assert target_row["score"] == 30
+
+
+@pytest.mark.skipif(not HAS_SPARK, reason="PySpark is required to run this assertion.")
+def test_spark_combined_golden_record(spark_df: Any) -> None:
+    """Asserts that combined() synthesizes golden records ignoring inner nulls in Spark."""
+    result = combined(spark_df, keys=["id"])
+
+    target_row = result.filter(F.col("id") == 1).collect()[0]
+    assert target_row["note"] == "oldest"

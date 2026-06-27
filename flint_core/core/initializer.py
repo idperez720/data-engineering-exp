@@ -1,93 +1,104 @@
 """This module implements the project structural initialization engine for flint."""
 
-import os
+import logging
+import textwrap
+from pathlib import Path
+
+# Initialize logger for the library
+logger = logging.getLogger(__name__)
 
 
-class ProjectInitializer:
-    """Handles scaffolding of directory structures for new data engineering setups.
+def initialize_project(
+    target_path: Path,
+    name: str = "my-flint-project",
+    version: str = "0.1.0",
+    description: str = "Data engineering project scaffolded by flint",
+    author: str = "Anonymous",
+    overwrite: bool = False,
+) -> None:
+    """Scaffolds the required folders and creates baseline configuration templates.
 
-    Automates the creation of standard configuration folders and source directories
-    to establish a unified project layout.
+    Args:
+        target_path: Root system directory where scaffolding will be built.
+        name: Operational name of the data project.
+        version: Initial semantic version string.
+        description: Short purpose statement describing the repository.
+        author: Full name or alias identifier of the creator.
+        overwrite: If True, existing files will be overwritten. Defaults to False.
+
+    Raises:
+        FileExistsError: If a baseline file already exists and overwrite is False.
     """
+    root = Path(target_path).resolve()
 
-    def __init__(self, base_path: str = ".") -> None:
-        """Initializes the ProjectInitializer with a target base path.
+    # 1. Define targeted paths using Path objects
+    folders = [
+        root / "conf" / "catalog",
+        root / "src" / "notebooks",
+        root / "data",
+    ]
 
-        Args:
-            base_path(str): Root system path where scaffolding will be built.
-                Defaults to ".".
+    toml_path = root / "pyproject.toml"
+    csv_path = root / "data" / "sample_table.csv"
+    catalog_path = root / "conf" / "catalog" / "sample_dataset.yaml"
 
-        Returns:
-            None: Initializes the class instance.
-        """
-        self.base_path = base_path
+    # 2. Defensive Programming: Prevent accidental data loss
+    if not overwrite and toml_path.exists():
+        raise FileExistsError(
+            f"A project configuration already exists at '{toml_path}'. "
+            f"Use 'overwrite=True' if you intend to recreate the scaffold."
+        )
 
-    def init_project(
-        self,
-        name: str = "my-flint-project",
-        version: str = "0.1.0",
-        description: str = "Data engineering project scaffolded by flint",
-        author: str = "Anonymous",
-    ) -> None:
-        """Scaffolds the required folders and creates baseline configuration templates.
+    logger.info("Initializing structural layout at %s", root)
 
-        Args:
-            name(str): Operational name of the data project. Defaults to
-                "my-flint-project".
-            version(str): Initial semver string version. Defaults to "0.1.0".
-            description(str): Short purpose statement describing the repository.
-                Defaults to "Data engineering project scaffolded by flint".
-            author(str): Full name or alias identifier of the creator. Defaults
-                to "Anonymous".
+    # 3. Create directories safely
+    for folder in folders:
+        if not folder.exists():
+            folder.mkdir(parents=True, exist_ok=True)
+            logger.info("Created directory: %s", folder.relative_to(root.parent))
 
-        Returns:
-            None: Side-effect function creating disk structures.
-        """
-        folders = [
-            os.path.join(self.base_path, "conf", "catalog"),
-            os.path.join(self.base_path, "src", "notebooks"),
-            os.path.join(self.base_path, "data"),
+    # 4. Generate pyproject.toml using textwrap.dedent for clean spacing
+    toml_content = textwrap.dedent(f"""\
+        [project]
+        name = "{name}"
+        version = "{version}"
+        description = "{description}"
+        authors = [
+            {{name = "{author}"}}
         ]
+        requires-python = ">=3.11,<4.0.0"
+    """)
 
-        for folder in folders:
-            os.makedirs(folder, exist_ok=True)
+    with open(toml_path, "w", encoding="utf-8") as file:
+        file.write(toml_content)
+    logger.info("Generated configuration file: %s", toml_path.name)
 
-        # Create a clean, standard pyproject.toml as the anchor of the project
-        toml_path = os.path.join(self.base_path, "pyproject.toml")
-        toml_content = (
-            "[project]\n"
-            f'name = "{name}"\n'
-            f'version = "{version}"\n'
-            f'description = "{description}"\n'
-            "authors = [\n"
-            f'    {{name = "{author}"}}\n'
-            "]\n"
-            'requires-python = ">=3.11,<4.0.0"\n'
-        )
-        with open(toml_path, "w", encoding="utf-8") as file:
-            file.write(toml_content)
+    # 5. Drop standard sample CSV file
+    csv_content = textwrap.dedent("""\
+        id,name
+        1,Alice
+        2,Bob
+    """)
+    with open(csv_path, "w", encoding="utf-8") as csv_file:
+        csv_file.write(csv_content)
+    logger.info("Generated sample data: data/%s", csv_path.name)
 
-        # Drop a real physical sample CSV file into the new data folder
-        csv_path = os.path.join(self.base_path, "data", "sample_table.csv")
-        csv_content = "id,name\n1,Alice\n2,Bob\n"
-        with open(csv_path, "w", encoding="utf-8") as csv_file:
-            csv_file.write(csv_content)
+    # 6. Inject boilerplate YAML catalog pointing to the CSV
+    sample_catalog_content = textwrap.dedent("""\
+        sample_table:
+          description: 'Boilerplate example dataset created by flint'
+          format: 'csv'
+          engine: 'pandas'
+          storage_path: 'data/sample_table.csv'
+          columns:
+            - name: 'id'
+              type: 'integer'
+            - name: 'name'
+              type: 'string'
+    """)
 
-        # Inject a sample boilerplate YAML catalog pointing to the real CSV
-        sample_catalog_path = os.path.join(
-            self.base_path, "conf", "catalog", "sample_dataset.yaml"
-        )
-        sample_content = (
-            "sample_table:\n"
-            "  description: 'Boilerplate example dataset created by flint'\n"
-            "  format: 'csv'\n"
-            "  engine: 'pandas'\n"
-            "  storage_path: 'data/sample_table.csv'\n"
-            "  columns:\n"
-            "    - name: 'id'\n"
-            "      type: 'integer'\n"
-            "    - name: 'name'\n"
-            "      type: 'string'\n"
-        )
-        with open(sample_catalog_path, "w", encoding="utf-8") as file:
-            file.write(sample_content)
+    with open(catalog_path, "w", encoding="utf-8") as file:
+        file.write(sample_catalog_content)
+    logger.info("Generated sample catalog mapping: conf/catalog/%s", catalog_path.name)
+
+    logger.info("Project '%s' successfully initialized.", name)
