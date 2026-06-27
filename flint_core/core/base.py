@@ -117,3 +117,16 @@ class BaseEngine(abc.ABC, Generic[DataFrameT]):
     ) -> Any:
         """Abstract requirement for data loading and schema enforcement."""
         pass
+
+    @abc.abstractmethod
+    def save(
+        self,
+        df: Any,
+        path: str,
+        data_format: str,
+        mode: str = "error",
+        metadata: Optional[Dict[str, Any]] = None,
+        spark: Optional[Any] = None,
+    ) -> None:
+        """Abstract requirement for data saving and option enforcement."""
+        pass

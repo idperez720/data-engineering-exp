@@ -7,7 +7,20 @@ from typing import Any, Dict, List, Optional
 
 import pyspark.sql.functions as F
 from pyspark.sql import DataFrame as SparkDataFrame
-from pyspark.sql.types import DataType, StructField, StructType
+from pyspark.sql.types import (
+    BooleanType,
+    DataType,
+    DateType,
+    DecimalType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 from flint_core.core.base import BaseEngine
 from flint_core.core.catalog.models import ColumnDefinition
@@ -30,21 +43,18 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
     ) -> SparkDataFrame:
         """Loads distributed data formats into a strict defined schema."""
         from pyspark.sql import SparkSession
-        from pyspark.sql.types import (
-            BooleanType,
-            DateType,
-            DecimalType,
-            DoubleType,
-            FloatType,
-            IntegerType,
-            LongType,
-            StringType,
-            TimestampType,
-        )
 
+        # Resolve and heal potential ghost sessions dynamically via reflection
         session = spark if spark is not None else SparkSession.getActiveSession()
+        if session is not None and getattr(session, "_sc", None) is None:
+            if hasattr(SparkSession, "_activeSession"):
+                setattr(SparkSession, "_activeSession", None)
+            if hasattr(SparkSession, "_instantiatedContext"):
+                setattr(SparkSession, "_instantiatedContext", None)
+            session = SparkSession.builder.getOrCreate()
+
         if session is None:
-            raise ValueError("No distributed cluster session manager could be resolved.")
+            session = SparkSession.builder.getOrCreate()
 
         spark_type_map: dict[str, DataType] = {
             "string": StringType(),
@@ -55,6 +65,7 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
             "boolean": BooleanType(),
             "timestamp": TimestampType(),
             "date": DateType(),
+            "decimal": DecimalType(38, 18),
         }
 
         fields = []
@@ -85,13 +96,11 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         spark_schema = StructType(fields) if fields else None
         reader = session.read
 
-        # Dynamic read-time option injection for Spark nested options
         if metadata and "options" in metadata:
             opts = metadata["options"]
             if isinstance(opts, dict):
                 reader = reader.options(**opts)
 
-        # Execute multi-format router mapping schemas
         if fmt == "parquet":
             if spark_schema:
                 reader = reader.schema(spark_schema)
@@ -114,7 +123,6 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         else:
             raise ValueError(f"Unsupported distributed format target: '{fmt}'.")
 
-        # Column-level string formats vectorized post-load enforcement
         for col in post_load_conversions:
             dt_clean = col.data_type.strip().lower() if col.data_type else ""
             if dt_clean == "date":
@@ -123,3 +131,45 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
                 df = df.withColumn(col.name, F.to_timestamp(F.col(col.name), col.format))
 
         return df
+
+    def save(
+        self,
+        df: SparkDataFrame,
+        path: str,
+        data_format: str,
+        mode: str = "error",
+        metadata: Optional[Dict[str, Any]] = None,
+        spark: Optional[Any] = None,
+    ) -> None:
+        """Saves a PySpark DataFrame utilizing the DataFrameWriter API."""
+        from pyspark.sql import SparkSession
+
+        # Resolve and heal potential ghost sessions dynamically via reflection
+        session = spark if spark is not None else SparkSession.getActiveSession()
+        if session is not None and getattr(session, "_sc", None) is None:
+            if hasattr(SparkSession, "_activeSession"):
+                setattr(SparkSession, "_activeSession", None)
+            if hasattr(SparkSession, "_instantiatedContext"):
+                setattr(SparkSession, "_instantiatedContext", None)
+            session = SparkSession.builder.getOrCreate()
+
+        if session is None:
+            session = SparkSession.builder.getOrCreate()
+
+        options = metadata.get("options", {}) if metadata else {}
+        fmt = data_format.strip().lower()
+
+        writer = df.write.mode(mode)
+        if options:
+            writer = writer.options(**options)
+
+        if fmt == "parquet":
+            writer.parquet(path)
+        elif fmt == "orc":
+            writer.orc(path)
+        elif fmt == "csv":
+            writer.options(header=True).csv(path)
+        elif fmt == "json":
+            writer.json(path)
+        else:
+            raise ValueError(f"Unsupported distributed write format parameters: '{fmt}'.")

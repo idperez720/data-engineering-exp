@@ -65,6 +65,35 @@ class DataCatalog:
             loader = DataLoader(catalog=self)
             return loader.load(dataset_name, spark=spark)
 
+    def save(
+        self,
+        df: Any,
+        dataset_name: str,
+        mode: str = "error",
+        spark: Optional[Any] = None,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Unified framework facade entrypoint to save data assets.
+
+        Args:
+            df: The incoming Pandas or Spark DataFrame to persist.
+            dataset_name: Unique identifier string target in the catalog.
+            mode: Write strategy behavior ('error', 'append', 'overwrite').
+            spark: Optional distributed active SparkSession execution runner.
+            options: Optional runtime overrides for the underlying writers.
+        """
+        from flint_core.core.io import DataSaver
+
+        with self._lock:
+            saver = DataSaver(catalog=self)
+            saver.save(
+                df=df,
+                dataset_name=dataset_name,
+                mode=mode,
+                spark=spark,
+                options=options,
+            )
+
     def reload_catalog(self, path: Path) -> None:
         with self._lock:
             self._datasets.clear()

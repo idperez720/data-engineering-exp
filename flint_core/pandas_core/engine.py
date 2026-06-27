@@ -1,8 +1,9 @@
-"""Pandas concrete engine implementation for multi-format data loading."""
+"""Pandas concrete engine implementation for multi-format data interaction."""
 
 from __future__ import annotations
 
 import decimal
+from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional
 
 import pandas as pd
@@ -14,7 +15,7 @@ from flint_core.pandas_core.scd2 import PandasSCD2Mixin
 
 
 class PandasEngine(PandasDeduplicationMixin, PandasSCD2Mixin, BaseEngine[pd.DataFrame]):
-    """Unified Pandas engine orchestrating core multi-format parsing."""
+    """Unified Pandas engine orchestrating clean multi-format parsing."""
 
     __slots__ = ()
 
@@ -38,7 +39,6 @@ class PandasEngine(PandasDeduplicationMixin, PandasSCD2Mixin, BaseEngine[pd.Data
         dtype_dict: Any = {}
         parse_dates_fallback: List[str] = []
 
-        # Extract the unified nested options dictionary pass-through
         options = metadata.get("options", {}) if metadata else {}
 
         for col in columns:
@@ -53,7 +53,6 @@ class PandasEngine(PandasDeduplicationMixin, PandasSCD2Mixin, BaseEngine[pd.Data
 
         fmt = data_format.strip().lower()
 
-        # Dynamic pass-through unpacking via kwargs (**options)
         if fmt == "csv":
             df = pd.read_csv(
                 path,
@@ -74,6 +73,45 @@ class PandasEngine(PandasDeduplicationMixin, PandasSCD2Mixin, BaseEngine[pd.Data
             raise ValueError(f"Unsupported Pandas format parameter: '{fmt}'.")
 
         return self._enforce_rich_types(df, columns, parse_dates_fallback)
+
+    def save(
+        self,
+        df: pd.DataFrame,
+        path: str,
+        data_format: str,
+        mode: str = "error",
+        metadata: Optional[Dict[str, Any]] = None,
+        spark: Optional[Any] = None,
+    ) -> None:
+        """Saves a Pandas DataFrame into the designated storage location."""
+        options = metadata.get("options", {}) if metadata else {}
+        fmt = data_format.strip().lower()
+
+        # Strict object-oriented validation utilizing pathlib
+        file_path = Path(path)
+
+        if file_path.exists():
+            if mode == "error":
+                raise FileExistsError(f"Target file path already exists on system: '{path}'.")
+            elif mode == "ignore":
+                return
+
+        # Generate parent folders safely imitating initialization layers
+        if not file_path.parent.exists():
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if fmt == "csv":
+            index_val = options.pop("index", False)
+            df.to_csv(path, index=index_val, **options)
+        elif fmt == "parquet":
+            df.to_parquet(path, **options)
+        elif fmt == "json":
+            orient_val = options.pop("orient", "records")
+            df.to_json(path, orient=orient_val, **options)
+        elif fmt == "orc":
+            df.to_orc(path, **options)
+        else:
+            raise ValueError(f"Unsupported Pandas write format: '{fmt}'.")
 
     def _apply_primitive_dtypes(self, df: pd.DataFrame, dtype_dict: Any) -> pd.DataFrame:
         """Applies primitive data types safely onto an existing DataFrame."""

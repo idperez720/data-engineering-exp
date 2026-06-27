@@ -1,4 +1,4 @@
-"""Unit tests for the advanced multi-format metadata-driven DataLoader engine."""
+"""Unit tests for the advanced multi-format DataLoader and DataSaver engines."""
 
 from __future__ import annotations
 
@@ -11,14 +11,14 @@ import yaml
 
 from flint_core.core.catalog import DataCatalog
 from flint_core.core.exceptions import UnsupportedBackendError
-from flint_core.core.io import DataLoader
+from flint_core.core.io import DataLoader, DataSaver
 
 
 @pytest.fixture
 def mock_advanced_io_environment(
     tmp_path: Path,
 ) -> Generator[DataCatalog, None, None]:
-    """Scaffolds a comprehensive environment with nested options in catalog."""
+    """Scaffolds a comprehensive environment with nested options for testing."""
     catalog_dir = tmp_path / "conf" / "catalog"
     data_dir = tmp_path / "data"
 
@@ -89,6 +89,14 @@ def mock_advanced_io_environment(
                 },
             ],
         },
+        "pandas_save_dataset": {
+            "engine": "pandas",
+            "format": "csv",
+            "storage_path": "data/output/saved_pandas.csv",
+            "options": {
+                "sep": "|",
+            },
+        },
         "spark_csv_dataset": {
             "engine": "spark",
             "format": "csv",
@@ -106,6 +114,11 @@ def mock_advanced_io_environment(
                     "format": "yyyy-MM-dd HH:mm:ss",
                 },
             ],
+        },
+        "spark_save_dataset": {
+            "engine": "spark",
+            "format": "parquet",
+            "storage_path": "data/output/saved_spark.parquet",
         },
         "unsupported_engine": {
             "engine": "duckdb",
@@ -193,6 +206,63 @@ def test_data_loader_runtime_options_override(
 
     # Since it didn't split by ';', it should have a single combined column name
     assert "id;price;event_date;processed_at" in df.columns
+
+
+def test_pandas_data_saver_flow(
+    mock_advanced_io_environment: DataCatalog,
+) -> None:
+    """Asserts polymorphic saving capability for PandasEngine."""
+    pd = pytest.importorskip("pandas")
+
+    # Create dummy frame to persist
+    test_df = pd.DataFrame({"id": [1, 2], "value": ["X", "Y"]})
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+    saver.save(test_df, "pandas_save_dataset", mode="overwrite")
+
+    # Resolve paths via project root boundaries using pure pathlib
+    expected_file = Path(mock_advanced_io_environment.project_root) / ("data/output/saved_pandas.csv")
+
+    assert expected_file.is_file()
+
+    # Read back to verify file schema and structure
+    read_back = pd.read_csv(expected_file, sep="|")
+    assert list(read_back.columns) == ["id", "value"]
+
+
+def test_pandas_data_saver_collision_error(
+    mock_advanced_io_environment: DataCatalog,
+) -> None:
+    """Asserts that save mode='error' raises on pre-existing paths."""
+    pd = pytest.importorskip("pandas")
+    test_df = pd.DataFrame({"id": [1]})
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+
+    # Writing to a path that we know exists (csv_dataset is data/dataset.csv)
+    with pytest.raises(FileExistsError):
+        saver.save(test_df, "csv_dataset", mode="error")
+
+
+def test_spark_data_saver_flow(mock_advanced_io_environment: DataCatalog, spark_session: Any) -> None:
+    """Asserts polymorphic saving capability for SparkEngine."""
+    pytest.importorskip("pyspark")
+
+    # Create dynamic distributed dataframe setup
+    test_df = spark_session.createDataFrame(
+        [
+            (1, "SparkText"),
+        ],
+        ["id", "value"],
+    )
+
+    saver = DataSaver(catalog=mock_advanced_io_environment)
+    saver.save(test_df, "spark_save_dataset", mode="overwrite", spark=spark_session)
+
+    expected_path = Path(mock_advanced_io_environment.project_root) / ("data/output/saved_spark.parquet")
+
+    # Spark directories validation check
+    assert expected_path.exists()
 
 
 def test_unsupported_engine_raises_error(
