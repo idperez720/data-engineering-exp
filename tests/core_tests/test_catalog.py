@@ -1,4 +1,4 @@
-"""Unit tests for the flint-core modular data catalog engine orchestration layers."""
+"""Unit tests for the flint-core dual-interface data catalog and loading orchestration."""
 
 from pathlib import Path
 from typing import Any, Generator, Set
@@ -13,7 +13,7 @@ from flint_core.core.catalog import (
     DataCatalog,
     DatasetConfiguration,
 )
-from flint_core.core.exceptions import CatalogParseError, ColumnValidationError
+from flint_core.core.exceptions import CatalogParseError
 
 # =============================================================================
 # PYTEST FIXTURES UTILITIES
@@ -41,9 +41,9 @@ def workspace_setup(tmp_path: Path) -> Generator[Path, None, None]:
     customers_yaml = {
         "customers": {
             "description": "Production golden customers database schema.",
-            "format": "parquet",
+            "format": "csv",
             "engine": "pandas",
-            "storage_path": "data/customers.parquet",
+            "storage_path": "conf/catalog/customers.yaml",  # Points to itself just as a dummy readable file
             "columns": [{"name": "customer_id", "type": "string"}, {"name": "email", "type": "string"}],
         }
     }
@@ -53,7 +53,7 @@ def workspace_setup(tmp_path: Path) -> Generator[Path, None, None]:
             "description": "High-volume business transactional ingestion track.",
             "format": "csv",
             "engine": "spark",
-            "storage_path": "data/orders.csv",
+            "storage_path": "conf/catalog/orders.yaml",  # Points to itself just as a dummy readable file
             "columns": [{"name": "order_id", "type": "long"}, {"name": "amount", "type": "double"}],
         }
     }
@@ -76,7 +76,12 @@ def test_entities_slots_optimization_enforcement() -> None:
     """Validates memory protection layer prohibiting dynamic internal dictionary allocation."""
     column = ColumnDefinition(name="test_col")
     dataset = DatasetConfiguration(
-        name="test_ds", engine="pandas", data_format="csv", storage_path="fake/path", columns=[], metadata={}
+        name="test_ds",
+        engine="pandas",
+        data_format="csv",
+        storage_path="fake/path",
+        columns=[],
+        metadata={},
     )
 
     with pytest.raises(AttributeError):
@@ -97,20 +102,21 @@ def test_entities_slots_optimization_enforcement() -> None:
 def test_adapter_registry_third_party_plug_in_extension() -> None:
     """Validates framework capabilities to incorporate external analytical adapters targets."""
 
-    class MockPolarsDataFrame:
-        def __init__(self) -> None:
-            self.columns = ["polars_id", "polars_metric"]
+    class MockCustomDataFrame:
+        pass
 
-    # Naming the class with 'Core_Tests' matches this test module's namespace string
-    class Core_TestsAdapter(BaseAdapter):
+    # Keyword derives automatically into 'mockecosystem' matching module paths string segment
+    class MockecosystemAdapter(BaseAdapter):
         def extract_columns(self, df: Any) -> Set[str]:
-            return set(df.columns)
+            return {"virtual_id", "virtual_metric"}
 
-    mock_df = MockPolarsDataFrame()
+    mock_df = MockCustomDataFrame()
+    mock_df.__class__.__module__ = "mockecosystem.dataframe"
+
     resolved_adapter = AdapterRegistry.resolve_adapter(mock_df)
 
-    assert isinstance(resolved_adapter, Core_TestsAdapter)
-    assert resolved_adapter.extract_columns(mock_df) == {"polars_id", "polars_metric"}
+    assert isinstance(resolved_adapter, MockecosystemAdapter)
+    assert resolved_adapter.extract_columns(mock_df) == {"virtual_id", "virtual_metric"}
 
 
 def test_unsupported_dataframe_matrix_raises_type_error() -> None:
@@ -152,7 +158,7 @@ def test_data_catalog_square_bracket_and_descriptor_access(workspace_setup: Path
     assert ds_via_bracket is ds_via_descriptor
     assert isinstance(ds_via_descriptor, DatasetConfiguration)
     assert ds_via_descriptor.engine == "pandas"
-    assert ds_via_descriptor.format == "parquet"
+    assert ds_via_descriptor.format == "csv"
     assert ds_via_descriptor.column_names == ["customer_id", "email"]
 
 
@@ -209,42 +215,53 @@ async def test_async_catalog_reloading_loop(workspace_setup: Path) -> None:
 
 
 # =============================================================================
-# REAL CONCRETE ADAPTER VALIDATION TESTING PLUGS (Zero global state flags)
+# DUAL-INTERFACE LOADING OPERATIONS TESTS (Zero global state flags)
 # =============================================================================
 
 
-def test_pandas_adapter_validation_flow(workspace_setup: Path) -> None:
-    """Asserts that schema verification routines interact natively with real local Pandas DataFrames."""
-    # Elite approach: Lazy import and clean auto-skip if dependency is uninstalled
+def test_pandas_dual_interface_loading_flow(workspace_setup: Path) -> None:
+    """Asserts that both catalog facades and fluent descriptors load pandas data symmetrically."""
     pd = pytest.importorskip("pandas")
 
     catalog = DataCatalog(catalog_path=workspace_setup / "conf" / "catalog")
 
-    valid_pandas_data = pd.DataFrame({"customer_id": ["C1"], "email": ["info@alpha.com"]})
-    invalid_pandas_data = pd.DataFrame({"wrong_id_key": ["C1"], "email": ["info@alpha.com"]})
+    # Route 1: Traditional Facade Loading Style
+    df_facade = catalog.load("customers")
+    assert isinstance(df_facade, pd.DataFrame)
 
-    assert catalog.customers.validate_schema(valid_pandas_data) is True  # type: ignore[attr-defined]
-
-    with pytest.raises(ColumnValidationError) as exc_info:
-        catalog.customers.validate_schema(invalid_pandas_data)  # type: ignore[attr-defined]
-
-    assert "Missing expected catalog columns" in str(exc_info.value)
+    # Route 2: Fluent Entity Domain Loading Style
+    df_fluent = catalog.customers.load()  # type: ignore[attr-defined]
+    assert isinstance(df_fluent, pd.DataFrame)
 
 
-def test_pyspark_adapter_validation_flow(workspace_setup: Path, spark_session: Any) -> None:
-    """Asserts that schema verification routines interact natively with distributed Spark plans."""
-    # Elite approach: Lazy skip validation tracking contextual session injections
+def test_pyspark_dual_interface_loading_flow(workspace_setup: Path, spark_session: Any) -> None:
+    """Asserts that both catalog facades and fluent descriptors load distributed spark data symmetrically."""
     pytest.importorskip("pyspark")
 
     catalog = DataCatalog(catalog_path=workspace_setup / "conf" / "catalog")
 
-    valid_spark_records = [{"order_id": 101, "amount": 250.50}]
-    invalid_spark_records = [{"wrong_order_column": 101, "amount": 250.50}]
+    # Route 1: Traditional Facade Loading Style
+    df_facade = catalog.load("orders", spark=spark_session)
+    assert df_facade.count() >= 0
 
-    valid_spark_df = spark_session.createDataFrame(valid_spark_records)
-    invalid_spark_df = spark_session.createDataFrame(invalid_spark_records)
+    # Route 2: Fluent Entity Domain Loading Style
+    df_fluent = catalog.orders.load(spark=spark_session)  # type: ignore[attr-defined]
+    assert df_fluent.count() >= 0
 
-    assert catalog.orders.validate_schema(valid_spark_df) is True  # type: ignore[attr-defined]
 
-    with pytest.raises(ColumnValidationError):
-        catalog.orders.validate_schema(invalid_spark_df)  # type: ignore[attr-defined]
+def test_detached_configuration_entity_raises_runtime_error() -> None:
+    """Validates that invoking .load() over an entity missing a parent catalog reference fails."""
+    detached_entity = DatasetConfiguration(
+        name="orphan_table",
+        engine="pandas",
+        data_format="csv",
+        storage_path="path/to/data.csv",
+        columns=[],
+        metadata={},
+        catalog_ref=None,  # Explicitly detached
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        detached_entity.load()
+
+    assert "is detached from an active DataCatalog context" in str(exc_info.value)

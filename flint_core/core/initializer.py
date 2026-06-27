@@ -95,23 +95,35 @@ class DirectoryStructureStep:
         return "Directory Structure Layout Scaffolding"
 
     def execute(self, context: ScaffoldContext) -> None:
-        folders = [
+        target_folders = [
             context.root_path / "conf" / "catalog",
             context.root_path / "src" / "notebooks",
             context.root_path / "data",
         ]
-        for folder in folders:
-            if not folder.exists():
-                folder.mkdir(parents=True, exist_ok=True)
-                context.created_paths.append(folder)
-                logger.info("Created system directory convention: %s", folder.relative_to(context.root_path.parent))
+
+        for folder in target_folders:
+            # Metaprogramming path-traversal: discover every non-existent parent level
+            parts_to_create = []
+            current = folder
+            while current != context.root_path and current != current.parent:
+                if not current.exists():
+                    parts_to_create.append(current)
+                    current = current.parent
+                else:
+                    break
+
+            # Physically generate folders from top to bottom, logging each step in the transaction
+            for part in reversed(parts_to_create):
+                part.mkdir(exist_ok=True)
+                context.created_paths.append(part)
+                logger.info("Created system directory convention: %s", part.relative_to(context.root_path.parent))
 
     def rollback(self, context: ScaffoldContext) -> None:
-        # Revert directories in inverted sequential execution structure layers
-        for folder in reversed(context.created_paths):
-            if folder.is_dir() and folder.exists() and not any(folder.iterdir()):
-                folder.rmdir()
-                logger.warning("Rollback operational cleanup: Removed empty directory %s", folder)
+        # Revert directories in perfect inverted sequential execution order
+        for item in reversed(context.created_paths):
+            if item.is_dir() and item.exists() and not any(item.iterdir()):
+                item.rmdir()
+                logger.warning("Rollback operational cleanup: Removed empty directory %s", item)
 
 
 class PyProjectTomlStep:
