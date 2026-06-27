@@ -44,17 +44,14 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         """Loads distributed data formats into a strict defined schema."""
         from pyspark.sql import SparkSession
 
-        # Resolve and heal potential ghost sessions dynamically via reflection
+        # Pure look-up resolution logic. Zero implicit side-effects.
         session = spark if spark is not None else SparkSession.getActiveSession()
-        if session is not None and getattr(session, "_sc", None) is None:
-            if hasattr(SparkSession, "_activeSession"):
-                setattr(SparkSession, "_activeSession", None)
-            if hasattr(SparkSession, "_instantiatedContext"):
-                setattr(SparkSession, "_instantiatedContext", None)
-            session = SparkSession.builder.getOrCreate()
-
-        if session is None:
-            session = SparkSession.builder.getOrCreate()
+        if session is None or getattr(session, "_sc", None) is None:
+            raise ValueError(
+                "No active distributed SparkSession could be resolved. You "
+                "must initialize a SparkSession before interacting with "
+                "Spark catalog datasets."
+            )
 
         spark_type_map: dict[str, DataType] = {
             "string": StringType(),
@@ -145,49 +142,44 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         """Saves a PySpark DataFrame enforcing schemas or falling back to raw."""
         from pyspark.sql import SparkSession
 
-        # Resolve and heal potential ghost sessions dynamically via reflection
+        # Pure look-up resolution logic. Zero implicit side-effects.
         session = spark if spark is not None else SparkSession.getActiveSession()
-        if session is not None and getattr(session, "_sc", None) is None:
-            if hasattr(SparkSession, "_activeSession"):
-                setattr(SparkSession, "_activeSession", None)
-            if hasattr(SparkSession, "_instantiatedContext"):
-                setattr(SparkSession, "_instantiatedContext", None)
-            session = SparkSession.builder.getOrCreate()
+        if session is None or getattr(session, "_sc", None) is None:
+            raise ValueError(
+                "No active distributed SparkSession could be resolved. You "
+                "must initialize a SparkSession before interacting with "
+                "Spark catalog datasets."
+            )
 
-        if session is None:
-            session = SparkSession.builder.getOrCreate()
-
-        options = metadata.get("options", {}) if metadata else {}
-        fmt = data_format.strip().lower()
-
-        # Graceful degradation for Schema-less writes
-        if not columns:
-            df_enforced = df
-        else:
-            # 1. Structural schema verification
-            catalog_names = [col.name for col in columns]
+        # 1. Structural schema verification
+        catalog_names = [col.name for col in columns]
+        if columns:
             missing_cols = [c for c in catalog_names if c not in df.columns]
             if missing_cols:
                 raise ValueError(
                     f"Schema enforcement failed on distributed write. Missing "
                     f"catalog columns in input Spark DataFrame: {missing_cols}"
                 )
-
-            # 2. Filtering / Column selection (Drops extra columns gracefully)
             df_enforced = df.select(*catalog_names)
+        else:
+            df_enforced = df
 
-            spark_type_map: dict[str, DataType] = {
-                "string": StringType(),
-                "integer": IntegerType(),
-                "long": LongType(),
-                "double": DoubleType(),
-                "float": FloatType(),
-                "boolean": BooleanType(),
-                "timestamp": TimestampType(),
-                "date": DateType(),
-            }
+        spark_type_map: dict[str, DataType] = {
+            "string": StringType(),
+            "integer": IntegerType(),
+            "long": LongType(),
+            "double": DoubleType(),
+            "float": FloatType(),
+            "boolean": BooleanType(),
+            "timestamp": TimestampType(),
+            "date": DateType(),
+        }
 
-            # 3. Dynamic Write-Time Coercion
+        options = metadata.get("options", {}) if metadata else {}
+        fmt = data_format.strip().lower()
+
+        # 2. Dynamic Write-Time Coercion
+        if columns:
             for col in columns:
                 if col.data_type is None:
                     continue
@@ -208,7 +200,7 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
                 else:
                     df_enforced = df_enforced.withColumn(col.name, F.col(col.name).cast(s_type))
 
-        # 4. Distributed Persist Execution
+        # 3. Distributed Persist Execution
         writer = df_enforced.write.mode(mode)
         if options:
             writer = writer.options(**options)
