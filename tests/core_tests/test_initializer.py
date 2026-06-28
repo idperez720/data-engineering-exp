@@ -12,7 +12,7 @@ from flint_core.core.initializer import (
 
 
 def test_project_initializer_happy_path(tmp_path: Path) -> None:
-    """Asserts that a standard project initialization seeds all directories and files correctly."""
+    """Asserts that a standard project initialization seeds all assets."""
     initializer = ProjectInitializer(base_path=tmp_path)
 
     initializer.init_project(
@@ -39,25 +39,34 @@ def test_project_initializer_happy_path(tmp_path: Path) -> None:
     assert (tmp_path / "data" / "sample_table.csv").is_file()
     assert (tmp_path / "conf" / "catalog" / "sample_dataset.yaml").is_file()
 
+    # 4. Verify Phase 1 global configuration convention file
+    spark_path = tmp_path / "conf" / "spark.yml"
+    assert spark_path.is_file()
+    spark_content = spark_path.read_text(encoding="utf-8")
+    assert "spark.sql.shuffle.partitions" in spark_content
+
 
 def test_project_initializer_collision_raises_exception(tmp_path: Path) -> None:
-    """Asserts that initializing over an existing pyproject.toml safely aborts to avoid overwrites."""
-    # Pre-seed a dummy pyproject.toml to force an architectural collision
+    """Asserts that initializing over an existing manifest safely aborts."""
     existing_toml = tmp_path / "pyproject.toml"
     existing_toml.write_text("[project]\nname = 'dont-overwrite-me'", encoding="utf-8")
 
     initializer = ProjectInitializer(base_path=tmp_path)
 
     with pytest.raises(ProjectInitializationError) as exc_info:
-        initializer.init_project(name="collision-test", version="0.1.0", description="Should fail", author="Tester")
+        initializer.init_project(
+            name="collision-test",
+            version="0.1.0",
+            description="Should fail",
+            author="Tester",
+        )
 
-    assert "Initialization transaction failed at runtime" in str(exc_info.value)
-    # Ensure the original file was protected and NOT overwritten
+    assert "scaffolding transaction failed" in str(exc_info.value)
     assert "dont-overwrite-me" in existing_toml.read_text(encoding="utf-8")
 
 
 def test_project_initializer_custom_step_registration(tmp_path: Path) -> None:
-    """Validates framework capabilities to inject third-party custom workflow steps dynamically (IoC)."""
+    """Validates framework capabilities to inject custom workflow steps."""
 
     class MockGitInitStep:
         @property
@@ -74,7 +83,6 @@ def test_project_initializer_custom_step_registration(tmp_path: Path) -> None:
             if git_dir.exists():
                 git_dir.rmdir()
 
-    # Save original pipeline state to prevent test cross-contamination (since it's a class variable)
     original_pipeline = ProjectInitializer._pipeline[:]
 
     try:
@@ -82,20 +90,21 @@ def test_project_initializer_custom_step_registration(tmp_path: Path) -> None:
         initializer = ProjectInitializer(base_path=tmp_path)
 
         initializer.init_project(
-            name="custom-step-test", version="0.1.0", description="Testing IoC hooks", author="Tester"
+            name="custom-step-test",
+            version="0.1.0",
+            description="Testing IoC hooks",
+            author="Tester",
         )
 
-        # Verify the custom step executed alongside the core stages
         assert (tmp_path / ".git").is_dir()
         assert (tmp_path / "pyproject.toml").is_file()
 
     finally:
-        # Restore architectural sanity post-execution
         ProjectInitializer._pipeline = original_pipeline
 
 
 def test_project_initializer_transactional_rollback(tmp_path: Path) -> None:
-    """Asserts the atomicity contract: if a subsequent step fails, all preceding mutations are rolled back cleanly."""
+    """Asserts atomicity: failures trigger full reverse cleanups cleanly."""
 
     class CatastrophicFaultyStep:
         @property
@@ -103,7 +112,6 @@ def test_project_initializer_transactional_rollback(tmp_path: Path) -> None:
             return "Simulated Network/Disk Failure Hook"
 
         def execute(self, context: ScaffoldContext) -> None:
-            # Trigger an intentional unhandled exception to simulate a crash mid-flight
             raise IOError("No space left on device or permission denied.")
 
         def rollback(self, context: ScaffoldContext) -> None:
@@ -112,19 +120,20 @@ def test_project_initializer_transactional_rollback(tmp_path: Path) -> None:
     original_pipeline = ProjectInitializer._pipeline[:]
 
     try:
-        # Inject the faulty step at the end of the pipeline execution sequence
         ProjectInitializer.register_scaffold_step(CatastrophicFaultyStep())
         initializer = ProjectInitializer(base_path=tmp_path)
 
         with pytest.raises(ProjectInitializationError):
             initializer.init_project(
-                name="broken-transaction", version="1.0.0", description="Rollback verification", author="Tester"
+                name="broken-transaction",
+                version="1.0.0",
+                description="Rollback verification",
+                author="Tester",
             )
 
-        # CRITICAL CONFORMANCE CHECK: The directory must be completely pristine.
-        # Preceding steps (folders, toml, csv) must have been removed by their respective rollbacks.
+        # The directory must be completely pristine, including spark.yml removal
         remaining_files = [p for p in tmp_path.rglob("*") if p != tmp_path]
-        assert len(remaining_files) == 0, f"Rollback leaked lingering assets on disk: {remaining_files}"
+        assert len(remaining_files) == 0
 
     finally:
         ProjectInitializer._pipeline = original_pipeline

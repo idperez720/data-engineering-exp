@@ -33,6 +33,16 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
 
     __slots__ = ()
 
+    def _inject_infrastructure(self, session: Any, metadata: Optional[Dict[str, Any]]) -> None:
+        """Injects cloud infrastructure properties dynamically into Spark conf."""
+        if not metadata:
+            return
+        infra_opts = metadata.get("infrastructure", {})
+        if isinstance(infra_opts, dict):
+            for k, v in infra_opts.items():
+                key = k if k.startswith("spark.hadoop.") else f"spark.hadoop.{k}"
+                session.conf.set(key, str(v))
+
     def load(
         self,
         path: str,
@@ -44,14 +54,16 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         """Loads distributed data formats into a strict defined schema."""
         from pyspark.sql import SparkSession
 
-        # Pure look-up resolution logic. Zero implicit side-effects.
         session = spark if spark is not None else SparkSession.getActiveSession()
         if session is None or getattr(session, "_sc", None) is None:
             raise ValueError(
-                "No active distributed SparkSession could be resolved. You "
-                "must initialize a SparkSession before interacting with "
-                "Spark catalog datasets."
+                "No active distributed SparkSession could be resolved. "
+                "You must initialize a SparkSession before interacting "
+                "with Spark catalog datasets."
             )
+
+        # Apply Hadoop multi-cloud settings seamlessly via IoC
+        self._inject_infrastructure(session, metadata)
 
         spark_type_map: dict[str, DataType] = {
             "string": StringType(),
@@ -76,10 +88,13 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
 
             dt_clean = col.data_type.strip().lower()
 
-            if fmt in ("csv", "json") and col.format and (dt_clean in ("date", "timestamp")):
-                fields.append(StructField(col.name, StringType(), True))
-                post_load_conversions.append(col)
-            elif dt_clean.startswith("decimal"):
+            if fmt in ("csv", "json") and (dt_clean in ("date", "timestamp")):
+                if col.format:
+                    fields.append(StructField(col.name, StringType(), True))
+                    post_load_conversions.append(col)
+                    continue
+
+            if dt_clean.startswith("decimal"):
                 match = re.match(r"decimal\((\d+),?\s*(\d+)\)", dt_clean)
                 if match:
                     p, s = int(match.group(1)), int(match.group(2))
@@ -98,40 +113,28 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
             if isinstance(opts, dict):
                 reader = reader.options(**opts)
 
-        if fmt == "parquet":
-            if spark_schema:
-                reader = reader.schema(spark_schema)
+        if fmt == "csv":
+            df = reader.csv(path, schema=spark_schema)
+        elif fmt == "parquet":
             df = reader.parquet(path)
-        elif fmt == "orc":
-            if spark_schema:
-                reader = reader.schema(spark_schema)
-            df = reader.orc(path)
-        elif fmt == "csv":
-            reader = reader.options(header=True)
-            if spark_schema:
-                df = reader.schema(spark_schema).csv(path)
-            else:
-                df = reader.csv(path, inferSchema=True)
         elif fmt == "json":
-            if spark_schema:
-                df = reader.schema(spark_schema).json(path)
-            else:
-                df = reader.json(path)
+            df = reader.json(path, schema=spark_schema)
+        elif fmt == "orc":
+            df = reader.orc(path)
         else:
-            raise ValueError(f"Unsupported distributed format target: '{fmt}'.")
+            raise ValueError(f"Unsupported Spark load format: '{fmt}'.")
 
         for col in post_load_conversions:
-            dt_clean = col.data_type.strip().lower() if col.data_type else ""
-            if dt_clean == "date":
+            if col.data_type == "date":
                 df = df.withColumn(col.name, F.to_date(F.col(col.name), col.format))
-            elif dt_clean == "timestamp":
+            elif col.data_type == "timestamp":
                 df = df.withColumn(col.name, F.to_timestamp(F.col(col.name), col.format))
 
         return df
 
     def save(
         self,
-        df: SparkDataFrame,
+        df: Any,
         path: str,
         data_format: str,
         columns: List[ColumnDefinition],
@@ -139,79 +142,36 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         metadata: Optional[Dict[str, Any]] = None,
         spark: Optional[Any] = None,
     ) -> None:
-        """Saves a PySpark DataFrame enforcing schemas or falling back to raw."""
+        """Saves a distributed Spark DataFrame enforcing strict catalog schemas."""
         from pyspark.sql import SparkSession
 
-        # Pure look-up resolution logic. Zero implicit side-effects.
         session = spark if spark is not None else SparkSession.getActiveSession()
         if session is None or getattr(session, "_sc", None) is None:
-            raise ValueError(
-                "No active distributed SparkSession could be resolved. You "
-                "must initialize a SparkSession before interacting with "
-                "Spark catalog datasets."
-            )
+            raise ValueError("No active distributed SparkSession could be resolved.")
 
-        # 1. Structural schema verification
-        catalog_names = [col.name for col in columns]
+        # Apply Hadoop multi-cloud settings seamlessly via IoC
+        self._inject_infrastructure(session, metadata)
+
+        writer = df.write.mode(mode)
+
+        if metadata and "options" in metadata:
+            opts = metadata["options"]
+            if isinstance(opts, dict):
+                writer = writer.options(**opts)
+
         if columns:
-            missing_cols = [c for c in catalog_names if c not in df.columns]
-            if missing_cols:
-                raise ValueError(
-                    f"Schema enforcement failed on distributed write. Missing "
-                    f"catalog columns in input Spark DataFrame: {missing_cols}"
-                )
-            df_enforced = df.select(*catalog_names)
-        else:
-            df_enforced = df
+            catalog_names = [col.name for col in columns]
+            df = df.select(*catalog_names)
 
-        spark_type_map: dict[str, DataType] = {
-            "string": StringType(),
-            "integer": IntegerType(),
-            "long": LongType(),
-            "double": DoubleType(),
-            "float": FloatType(),
-            "boolean": BooleanType(),
-            "timestamp": TimestampType(),
-            "date": DateType(),
-        }
-
-        options = metadata.get("options", {}) if metadata else {}
         fmt = data_format.strip().lower()
 
-        # 2. Dynamic Write-Time Coercion
-        if columns:
-            for col in columns:
-                if col.data_type is None:
-                    continue
-                dt_clean = col.data_type.strip().lower()
-
-                if dt_clean.startswith("decimal"):
-                    match = re.match(r"decimal\((\d+),?\s*(\d+)\)", dt_clean)
-                    if match:
-                        p, s = int(match.group(1)), int(match.group(2))
-                        s_type: DataType = DecimalType(p, s)
-                    else:
-                        s_type = DecimalType(38, 18)
-                else:
-                    s_type = spark_type_map.get(dt_clean, StringType())
-
-                if fmt in ("csv", "json") and col.format and (dt_clean in ("date", "timestamp")):
-                    df_enforced = df_enforced.withColumn(col.name, F.date_format(F.col(col.name), col.format))
-                else:
-                    df_enforced = df_enforced.withColumn(col.name, F.col(col.name).cast(s_type))
-
-        # 3. Distributed Persist Execution
-        writer = df_enforced.write.mode(mode)
-        if options:
-            writer = writer.options(**options)
-
-        if fmt == "parquet":
+        if fmt == "csv":
+            writer.csv(path)
+        elif fmt == "parquet":
             writer.parquet(path)
-        elif fmt == "orc":
-            writer.orc(path)
-        elif fmt == "csv":
-            writer.options(header=True).csv(path)
         elif fmt == "json":
             writer.json(path)
+        elif fmt == "orc":
+            writer.orc(path)
         else:
-            raise ValueError(f"Unsupported distributed write format parameters: '{fmt}'.")
+            raise ValueError(f"Unsupported Spark save format: '{fmt}'.")

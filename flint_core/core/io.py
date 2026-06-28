@@ -4,9 +4,22 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from flint_core.core.base import EngineRegistry
 from flint_core.core.catalog.models import DatasetConfiguration
+
+
+def _resolve_path(raw_path: str, project_root: Path) -> str:
+    """Resolves target paths, safeguarding cloud URIs from local expansion."""
+    parsed = urlparse(raw_path)
+    if parsed.scheme in ("s3", "gs", "gcs", "abfss", "az"):
+        return raw_path
+
+    file_path = Path(raw_path)
+    if not file_path.is_absolute():
+        return str((project_root / file_path).resolve())
+    return str(file_path.resolve())
 
 
 class DataLoader:
@@ -26,14 +39,7 @@ class DataLoader:
     ) -> Any:
         """Loads a dataset from storage utilizing dynamic engine dispatching."""
         dataset: DatasetConfiguration = self.catalog.get_dataset(dataset_name)
-        raw_path = dataset.storage_path
-
-        # Resolution utilizing object-oriented Path conventions
-        file_path = Path(raw_path)
-        if not file_path.is_absolute():
-            file_path = (self.catalog.project_root / file_path).resolve()
-        else:
-            file_path = file_path.resolve()
+        resolved_path = _resolve_path(dataset.storage_path, self.catalog.project_root)
 
         # Merge static catalog options with dynamic runtime overrides
         raw_catalog_opts = dataset.metadata.get("options", {})
@@ -49,7 +55,7 @@ class DataLoader:
         # Pure Inversion of Control pattern execution
         engine = EngineRegistry.get_engine(dataset.engine)
         return engine.load(
-            path=str(file_path),
+            path=resolved_path,
             data_format=dataset.format,
             columns=dataset.columns,
             metadata=combined_metadata,
@@ -76,14 +82,7 @@ class DataSaver:
     ) -> None:
         """Saves a dataframe utilizing dynamic engine dispatching."""
         dataset = self.catalog.get_dataset(dataset_name)
-        raw_path = dataset.storage_path
-
-        # Resolution utilizing object-oriented Path conventions
-        file_path = Path(raw_path)
-        if not file_path.is_absolute():
-            file_path = (self.catalog.project_root / file_path).resolve()
-        else:
-            file_path = file_path.resolve()
+        resolved_path = _resolve_path(dataset.storage_path, self.catalog.project_root)
 
         # Merge static catalog options with dynamic runtime overrides
         raw_catalog_opts = dataset.metadata.get("options", {})
@@ -100,7 +99,7 @@ class DataSaver:
         engine = EngineRegistry.get_engine(dataset.engine)
         engine.save(
             df=df,
-            path=str(file_path),
+            path=resolved_path,
             data_format=dataset.format,
             columns=dataset.columns,
             mode=mode,
