@@ -195,6 +195,13 @@ class SampleSparkConfigStep:
             spark.sql.shuffle.partitions: "2"
             spark.default.parallelism: "2"
             spark.sql.execution.arrow.pyspark.enabled: "true"
+
+            # --- Cloud Storage Connectors (JAR Packages Download Coordination) ---
+            # Uncomment the packages based on your cloud data infrastructure:
+            # AWS S3 Connector (Replace version matching your Spark distribution):
+            # spark.jars.packages: "org.apache.hadoop:hadoop-aws:3.3.4"
+            # Google Cloud Storage (GCS) Connector:
+            # spark.jars.packages: "com.google.cloud.bigdataoss:gcs-connector:hadoop3-2.2.6"
         """)
         with open(spark_path, "w", encoding="utf-8") as file:
             file.write(spark_content)

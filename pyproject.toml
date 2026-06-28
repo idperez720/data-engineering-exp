@@ -21,9 +21,21 @@ pandas = [
 spark = [
     "pyspark (>=4.1.2,<5.0.0)"
 ]
+aws = [
+    "s3fs (>=2024.10.0)"
+]
+gcp = [
+    "gcsfs (>=2024.10.0)"
+]
+azure = [
+    "adlfs (>=2024.10.0)"
+]
 all = [
     "pandas (>=3.0.3,<4.0.0)",
-    "pyspark (>=4.1.2,<5.0.0)"
+    "pyspark (>=4.1.2,<5.0.0)",
+    "s3fs (>=2024.10.0)",
+    "gcsfs (>=2024.10.0)",
+    "adlfs (>=2024.10.0)"
 ]
 
 [tool.poetry]
@@ -70,7 +82,13 @@ extend-exclude = ["migrations", "alembic"]
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
-section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder"
+]
 known-first-party = ["flint_core"]
 
 [tool.mypy]
