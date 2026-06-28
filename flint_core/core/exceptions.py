@@ -23,3 +23,8 @@ class CatalogParseError(FlintError):
     """Raised when a YAML catalog file cannot be parsed due to syntax errors."""
 
     pass
+
+class ProjectInitializationError(FlintError):
+    """Raised when the project scaffolding pipeline encounters a failure."""
+
+    pass
