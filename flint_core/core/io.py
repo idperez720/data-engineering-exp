@@ -13,7 +13,17 @@ from flint_core.core.catalog.models import DatasetConfiguration
 def _resolve_path(raw_path: str, project_root: Path) -> str:
     """Resolves target paths, safeguarding cloud URIs from local expansion."""
     parsed = urlparse(raw_path)
-    if parsed.scheme in ("s3", "gs", "gcs", "abfss", "az"):
+    if parsed.scheme in (
+        "s3",
+        "s3a",
+        "s3n",
+        "gs",
+        "gcs",
+        "abfss",
+        "az",
+        "wasb",
+        "wasbs",
+    ):
         return raw_path
 
     file_path = Path(raw_path)

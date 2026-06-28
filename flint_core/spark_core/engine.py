@@ -34,14 +34,22 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
     __slots__ = ()
 
     def _inject_infrastructure(self, session: Any, metadata: Optional[Dict[str, Any]]) -> None:
-        """Injects cloud infrastructure properties dynamically into Spark conf."""
+        """Injects cloud infrastructure properties dynamically into Spark."""
         if not metadata:
             return
         infra_opts = metadata.get("infrastructure", {})
-        if isinstance(infra_opts, dict):
-            for k, v in infra_opts.items():
-                key = k if k.startswith("spark.hadoop.") else f"spark.hadoop.{k}"
-                session.conf.set(key, str(v))
+        if not isinstance(infra_opts, dict):
+            return
+
+        for k, v in infra_opts.items():
+            # 1. Propagate to SQL Conf for cluster executors
+            spark_key = k if k.startswith("spark.hadoop.") else f"spark.hadoop.{k}"
+            session.conf.set(spark_key, str(v))
+
+            # 2. Sync directly with JVM Hadoop Configuration for driver checks
+            hadoop_key = k[13:] if k.startswith("spark.hadoop.") else k
+            if hasattr(session, "_jsc") and session._jsc is not None:
+                session._jsc.hadoopConfiguration().set(hadoop_key, str(v))
 
     def load(
         self,
@@ -62,7 +70,7 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
                 "with Spark catalog datasets."
             )
 
-        # Apply Hadoop multi-cloud settings seamlessly via IoC
+        # Apply Hadoop multi-cloud settings seamlessly to SQL and JVM layers
         self._inject_infrastructure(session, metadata)
 
         spark_type_map: dict[str, DataType] = {
@@ -149,7 +157,7 @@ class SparkEngine(SparkDeduplicationMixin, SparkSCD2Mixin, BaseEngine[SparkDataF
         if session is None or getattr(session, "_sc", None) is None:
             raise ValueError("No active distributed SparkSession could be resolved.")
 
-        # Apply Hadoop multi-cloud settings seamlessly via IoC
+        # Apply Hadoop multi-cloud settings seamlessly to SQL and JVM layers
         self._inject_infrastructure(session, metadata)
 
         writer = df.write.mode(mode)
